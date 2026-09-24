@@ -16,6 +16,10 @@ on:
         description: "Only print what Spotify's extensions reach for (scripts/inspect-extensions.sh), build nothing"
         default: false
         type: boolean
+      inspect_pattern:
+        description: "With inspect_only: list Spotify's Objective-C methods and strings matching this regex instead"
+        default: ""
+        type: string
 
 env:
   THEOS: ${{ github.workspace }}/theos
@@ -51,7 +55,9 @@ jobs:
 
       - name: Inspect the extensions
         if: inputs.inspect_only
-        run: ./scripts/inspect-extensions.sh ipa/spotify.ipa
+        env:
+          PATTERN: ${{ inputs.inspect_pattern }}
+        run: ./scripts/inspect-extensions.sh ipa/spotify.ipa "$PATTERN"
 
       - run: make release
         if: ${{ !inputs.inspect_only }}

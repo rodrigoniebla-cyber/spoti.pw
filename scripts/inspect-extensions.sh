@@ -4,14 +4,32 @@
 # and account strings in its code. It is how a sideload problem of an extension (Siri's "verify your
 # account details") is looked at without a Mac of one's own: run it in CI and read the log.
 #
-#   scripts/inspect-extensions.sh <decrypted.ipa>
+#   scripts/inspect-extensions.sh <decrypted.ipa> [pattern]
+#
+# With a pattern (an extended regex), it instead lists the Objective-C methods of Spotify's executable
+# and frameworks whose class or selector matches, as "-[Class selector]", and the strings that match:
+# how to find the calls a feature needs without a Mac.
 set -uo pipefail
-IN="${1:?usage: $0 <ipa>}"
+IN="${1:?usage: $0 <ipa> [pattern]}"
+PATTERN="${2:-}"
 WORK="$(mktemp -d)"
 unzip -q "$IN" -d "$WORK"
 APP="$(ls -d "$WORK"/Payload/*.app | head -1)"
 
 section() { printf '\n======== %s ========\n' "$*"; }
+
+if [ -n "$PATTERN" ]; then
+  EXEC="$APP/$(plutil -extract CFBundleExecutable raw -o - "$APP/Info.plist")"
+  for B in "$EXEC" "$APP"/Frameworks/*.framework/*; do
+    [ -f "$B" ] && file "$B" | grep -q Mach-O || continue
+    section "$(basename "$B"): methods matching $PATTERN"
+    otool -oV "$B" 2>/dev/null | "$(dirname "$0")/objc-methods.py" "$PATTERN" | head -600
+    section "$(basename "$B"): strings matching $PATTERN"
+    strings -a "$B" | grep -E "$PATTERN" | sort -u | head -300
+  done
+  rm -rf "$WORK"
+  exit 0
+fi
 ents() { codesign -d --entitlements - --xml "$1" 2>/dev/null | plutil -p - 2>/dev/null || ldid -e "$1" 2>/dev/null; }
 interesting='group\.|keychain|[Aa]ccess[Gg]roup|kSecAttr|suiteName|[Ss]iri|INPlayMedia|INMedia|INAddMedia|INSearchForMedia|[Ll]ogged|[Ll]ogin|[Cc]redential|[Uu]sername|[Aa]ccessToken|[Rr]efreshToken|[Aa]uth|[Vv]erify|[Aa]ccount|handleInApp|HandleInApp|NotSubscribed|RequiringAppLaunch|com\.spotify'
 
