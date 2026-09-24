@@ -16,6 +16,21 @@ SGModSection *SGLyricsSourcesSection(BOOL namingSource);
 SGModRow *SGLockScreenLyricsRow(void);
 SGModRow *SGLyricsTranslationLanguageRow(void);
 SGModRow *SGLyricsWordTimingRow(void);
+@class SGKaraokeLine;
+// LyricsStore.m: the Offline section, the switch and the count of songs with a way to delete them.
+SGModSection *SGLyricsOfflineSection(void);
+
+// Keeps every track's lines on the phone once they came, and reads them back when they are not in
+// memory, so lyrics show offline (LyricsStore.m). On until switched off.
+#define SGKeyLyricsOffline @"spotifyglass.lyricsOffline"
+// KaraokeSource.x's %ctor starts it; until then nothing is kept or found. Safe from any thread but
+// Read, which reads the disk and belongs off the main thread when it can be.
+void SGLyricsStoreStart(void);
+BOOL SGLyricsStoreHas(NSString *trackID);
+NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, NSString **credit);
+void SGLyricsStoreWrite(NSString *trackID, NSArray<SGKaraokeLine *> *lines);
+NSUInteger SGLyricsStoreCount(void);
+void SGLyricsStoreClear(void);
 
 // Sweeps a line timed only by the line word by word, on the estimate of when each word is sung, as if
 // the source had timed them. Off, such a line lights up whole as it starts. Off by default: the
