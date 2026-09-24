@@ -19,6 +19,20 @@ section "app"
 plutil -p "$APP/Info.plist" | grep -iE 'CFBundleIdentifier|CFBundleExecutable|INIntents|NSUserActivityTypes|Siri|AppGroup|Keychain' || true
 section "app entitlements"
 ents "$APP/$(plutil -extract CFBundleExecutable raw -o - "$APP/Info.plist")"
+section "app intents metadata"
+if [ -d "$APP/Metadata.appintents" ]; then
+  ls -la "$APP/Metadata.appintents"
+  python3 - "$APP/Metadata.appintents/extract.actionsdata" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k, v in d.items():
+    if isinstance(v, dict): print(f"{k}: {len(v)} -> {', '.join(list(v)[:40])}")
+    elif isinstance(v, list): print(f"{k}: list of {len(v)}"); print(json.dumps(v, indent=1)[:3000])
+    else: print(f"{k}: {v!r}"[:400])
+PY
+else
+  echo "no Metadata.appintents"
+fi
 section "frameworks"
 ls "$APP/Frameworks" 2>/dev/null
 
