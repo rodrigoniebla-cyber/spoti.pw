@@ -18,10 +18,12 @@
     tweak/Sources/Diagnostics/  screen dumps, the tree server and the main thread hang sampler of FLEX builds
     extension/LiveActivity/     the Live Activity widget, a WidgetKit extension of its own
     extension/AppGroups/        a dylib loaded by Spotify and each of its extensions that moves Spotify's App Groups
-                                into a group the re-signed IPA has; without it the widget stays a placeholder and
-                                Siri asks to verify the account
+                                into a group the re-signed IPA has (AppGroups.m), and the keychain group Spotify hands
+                                its Siri extension the login through into a store in that group (Keychain.m); without
+                                it the widget stays a placeholder and Siri asks to verify the account
     scripts/                    pipeline.sh (build + inject), build-extension.sh (the widget extension, without an
-                                Xcode project), merge-appintents.py (the widget's intents into Spotify's), insert-dylib.py (a load command into
+                                Xcode project), merge-appintents.py (the widget's and the presets' intents into Spotify's), inspect-extensions.sh (what Spotify's
+                                extensions reach for, in CI: build-ipa.yml's inspect_only), insert-dylib.py (a load command into
                                 Spotify's extensions), install.sh (sign + install), record-trees.py, record-session.py,
                                 dump-log.sh, extract-flags.py
     trees/                      recorded view trees, one per screen; the input for every new hook. trees/clean/ holds
@@ -79,7 +81,8 @@ Shared:
     Lyrics/       the lyrics engine for the redesign's Apple Music style lyrics and the lock screen: lines read from
                   color-lyrics and the player's clock (KaraokeSource.x), words timed by estimate inside Spotify's line
                   times (KaraokeTiming.m), which line to name where two voices sing at once (the one that came in first,
-                  for the lock screen and the Live Activity), and the Lyrics page's parts
+                  for the lock screen and the Live Activity), every track's lines kept on the phone and read back when
+                  memory has none, so they show offline (LyricsStore.m), and the Lyrics page's parts
     LyricsSources/ the sources lyrics come from, asked in the order the Lyrics page puts them in and merged into the
                   best answer (LyricsSources.m, the list to drag in LyricsSourcesPage.m): Apple Music's TTML from
                   BiniLyrics.m and Unison.m, read by SGTTML.m, which carries a second voice and the
@@ -116,7 +119,9 @@ Shared:
                   more button's menu Speed and pitch: both done to Spotify's audio by Apple's time and pitch unit, put
                   between its mixer and its RemoteIO unit by taking over the connection Spotify makes between them
                   (SpeedPitchMenu.x, SpeedPitch.x, SGTimePitch.m). The block goes into Spotify's own context menu sheet
-                  and is drawn from its own measures, not the Kit's, so it sits there under either look. Tested on the
+                  and is drawn from its own measures, not the Kit's, so it sits there under either look. Its Preset line
+                  sets both from the user's presets (SpeedPitchPresets.m, stored), which Siri and Shortcuts can set too
+                  (SpeedPitchIntents.swift, App Intents added to Spotify's metadata by build-extension.sh). Tested on the
                   Mac against harness/pitch/ and in the simulator against harness/speed/ and harness/menu/
     AudioEffects/ the audio effects on Spotify's sound (AudioEffects.h has the keys and the page's calls): Spotify's
                   import of AudioOutputUnitStart is rebound, as Music Haptics does, and a render notify on its RemoteIO

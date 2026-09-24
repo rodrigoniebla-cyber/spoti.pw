@@ -9,6 +9,8 @@
 // The Siri extension is the same story: it looks for the signed in account in the app's groups, finds
 // an empty suite and has Siri answer "you'll need to verify your account details in Spotify".
 //
+// The Siri extension's login is a second case, in the keychain rather than a group: Keychain.m.
+//
 // This dylib is loaded by Spotify and by every extension of Spotify's (scripts/pipeline.sh adds the
 // load command to each). In each it maps every group.* identifier the process is not entitled
 // to onto a folder inside one group it is entitled to, the same folder in both processes, so the
@@ -17,6 +19,7 @@
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <os/log.h>
+#import "AppGroups.h"
 
 typedef struct __SecTask *SecTaskRef;
 extern SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
@@ -26,17 +29,22 @@ extern CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef ent
 - (instancetype)_initWithSuiteName:(NSString *)suiteName container:(NSURL *)container;
 @end
 
-static os_log_t sLog;
+os_log_t SGShimLog;
+#define sLog SGShimLog
 static NSArray<NSString *> *sEntitled;
 static NSURL *(*sOrigContainerURL)(id, SEL, NSString *);
 static id (*sOrigInitWithSuiteName)(id, SEL, NSString *);
 
-static NSArray<NSString *> *EntitledGroups(void) {
+id SGShimEntitlement(NSString *name) {
   SecTaskRef task = SecTaskCreateFromSelf(NULL);
-  if (!task) return @[];
-  CFTypeRef value = SecTaskCopyValueForEntitlement(task, CFSTR("com.apple.security.application-groups"), NULL);
+  if (!task) return nil;
+  CFTypeRef value = SecTaskCopyValueForEntitlement(task, (__bridge CFStringRef)name, NULL);
   CFRelease(task);
-  NSArray *groups = CFBridgingRelease(value);
+  return CFBridgingRelease(value);
+}
+
+static NSArray<NSString *> *EntitledGroups(void) {
+  NSArray *groups = SGShimEntitlement(@"com.apple.security.application-groups");
   if (![groups isKindOfClass:NSArray.class]) return @[];
   // Sorted, so the app and its extensions pick the same host group whatever order the signer wrote.
   return [groups sortedArrayUsingSelector:@selector(compare:)];
@@ -65,6 +73,17 @@ static NSURL *RedirectedContainer(NSString *group) {
   return nil;
 }
 
+NSURL *SGShimHostContainer(void) {
+  NSFileManager *fm = NSFileManager.defaultManager;
+  for (NSString *entitled in sEntitled) {
+    NSURL *host = sOrigContainerURL
+        ? sOrigContainerURL(fm, @selector(containerURLForSecurityApplicationGroupIdentifier:), entitled)
+        : [fm containerURLForSecurityApplicationGroupIdentifier:entitled];
+    if (host) return host;
+  }
+  return nil;
+}
+
 static NSURL *SGContainerURL(id self, SEL _cmd, NSString *group) {
   NSURL *url = RedirectedContainer(group);
   return url ?: sOrigContainerURL(self, _cmd, group);
@@ -86,6 +105,7 @@ __attribute__((constructor)) static void SGAppGroupsInit(void) {
   sEntitled = EntitledGroups();
   os_log(sLog, "[spotifyglass] appgroups: %{public}@ entitled to %{public}@",
          NSBundle.mainBundle.bundleIdentifier, [sEntitled componentsJoinedByString:@", "]);
+  SGShimKeychainInit();
   if (sEntitled.count == 0) return;
 
   Method m = class_getInstanceMethod(NSFileManager.class, @selector(containerURLForSecurityApplicationGroupIdentifier:));
