@@ -114,6 +114,11 @@ Shared:
                   shape the key wants (Apple's 3:4 cover needs none) and kept under a 120 MB cap. Checked on
                   the Mac against harness/lockart/
     Navigation/   the page transition fix (PageTransition.x) and opening a spotify: link (Links.x)
+    Siri/         Siri and Shortcuts actions on Spotify itself (SiriIntents.swift, with the app's one App Shortcuts
+                  provider): play the DJ, like or unlike the song playing, download or remove the download of the
+                  playlist playing. SiriActions.m calls Spotify's own collection, offline and player services, found
+                  by selector among Spotify's classes and then on the heap (SGHeap.m), each call checked against the
+                  method's type encoding first
     Player/       the player's open and close announced (PlayerEvents.x), what the player is doing read through
                   one hook for every feature that wants it (PlayerState.x), the lock screen widget's flags, and in the
                   more button's menu Speed and pitch: both done to Spotify's audio by Apple's time and pitch unit, put
