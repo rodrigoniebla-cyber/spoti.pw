@@ -15,6 +15,8 @@ OUT="${2:?usage: $0 <host Info.plist> <out dir>}"
 NAME=SpotifyGlassLiveActivity
 APPEX="$OUT/$NAME.appex"
 SHARED="$ROOT/tweak/Sources/Shared/LiveActivity/LiveActivityShared.swift"
+# Speed and pitch presets for Siri and Shortcuts: intents of the app's alone, in the tweak's module.
+PRESETS="$ROOT/tweak/Sources/Shared/Player/SpeedPitchIntents.swift"
 WIDGET="$ROOT/extension/LiveActivity/LiveActivityWidget.swift"
 
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
@@ -56,8 +58,8 @@ sed -e "s/HOST_BUNDLE_ID/$(plutil -extract CFBundleIdentifier raw -o - "$HOST_PL
 plutil -convert binary1 "$APPEX/Info.plist"
 
 # The taps' intents run inside Spotify, so Spotify's metadata has to name them too, under the
-# module the tweak compiles them in (Theos names it after the tweak instance).
-metadata spotifyglass 16.0 "$OUT/app" "$SHARED"
+# module the tweak compiles them in (Theos names it after the tweak instance). So do the presets'.
+metadata spotifyglass 16.0 "$OUT/app" "$SHARED" "$PRESETS"
 
 codesign -f -s - "$APPEX" >/dev/null 2>&1
 rm -rf "$WORK"

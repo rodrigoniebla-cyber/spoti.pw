@@ -1,7 +1,8 @@
 // The player's more menu gets Speed and pitch, under either look: one row in Spotify's own context menu
 // sheet that opens, right there in the sheet, onto two sliders, the playback speed and the pitch
-// (SpeedPitch.x applies them). Above the sliders a Preset line sets both at once from a short list
-// (slowed, nightcore...); the sliders stay free, and the line says Custom once they leave a preset.
+// (SpeedPitch.x applies them). Above the sliders a Preset line sets both at once from the user's presets
+// (SpeedPitchPresets.m), where the current speed and pitch can be saved under a name and a preset
+// deleted; the sliders stay free, and the line says Custom once they leave a preset.
 //
 // The sheet is Spotify's ContextMenu_InternalImpl.ContextMenuViewController, a table of its rows
 // (ContextMenuTableView, sized to its content). Its rows come from Swift item factories with no way in,
@@ -77,32 +78,6 @@ static const float kMinSpeed = 0.5f, kMaxSpeed = 2, kSpeedStep = 0.05f;
 static const float kMaxPitch = 12;
 // Speed is applied at most this often while the slider moves.
 static const NSTimeInterval kSpeedInterval = 0.05;
-
-// Speed and pitch together. The slowed and sped up ones move the pitch with the speed the way a record
-// played at another speed does (12 × log2 of the speed, rounded to a semitone); the last two leave the
-// speed alone.
-typedef struct {
-    __unsafe_unretained NSString *name;
-    float speed, pitch;
-} SGSpeedPitchPreset;
-static const SGSpeedPitchPreset kPresets[] = {
-    {@"Normal", 1, 0},
-    {@"Slowed", 0.8f, -4},
-    {@"Slightly slowed", 0.9f, -2},
-    {@"Sped up", 1.15f, 2},
-    {@"Nightcore", 1.3f, 5},
-    {@"Deep", 1, -4},
-    {@"High", 1, 5},
-};
-static const NSInteger kPresetCount = sizeof(kPresets) / sizeof(kPresets[0]);
-
-// The preset speed and pitch are at, or -1 when they are at none.
-static NSInteger presetFor(float speed, float pitch) {
-    for (NSInteger i = 0; i < kPresetCount; i++) {
-        if (fabsf(kPresets[i].speed - speed) < 0.001f && kPresets[i].pitch == pitch) return i;
-    }
-    return -1;
-}
 
 static NSTimeInterval sg_moreTappedAt;
 static BOOL sg_open;
@@ -203,6 +178,10 @@ static void placeTick(UISlider *slider) {
 static NSString *speedText(float speed);
 static NSString *pitchText(float pitch);
 
+static NSString *presetSubtitle(float speed, float pitch) {
+    return [NSString stringWithFormat:@"%@  %@", speedText(speed), pitch ? [pitchText(pitch) stringByAppendingString:@" st"] : @"0 st"];
+}
+
 // The preset's name with an up and down chevron after it, opening the list as a menu on a tap. The list
 // is built each time it opens, so its tick is on whatever the sliders are at then.
 - (UIButton *)presetButton {
@@ -225,19 +204,38 @@ static NSString *pitchText(float pitch);
     __weak SGSpeedPitchView *weakSelf = self;
     UIDeferredMenuElement *items = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
         SGSpeedPitchView *view = weakSelf;
-        NSInteger current = view ? presetFor(view->_shownSpeed, view->_shownPitch) : -1;
-        NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
-        for (NSInteger i = 0; i < kPresetCount; i++) {
-            NSString *subtitle = [NSString stringWithFormat:@"%@  %@", speedText(kPresets[i].speed),
-                                  kPresets[i].pitch ? [pitchText(kPresets[i].pitch) stringByAppendingString:@" st"] : @"0 st"];
-            UIAction *action = [UIAction actionWithTitle:kPresets[i].name image:nil identifier:nil handler:^(UIAction *a) {
-                [weakSelf applyPreset:i];
+        NSArray<SGSpeedPitchPreset *> *presets = SGSpeedPitchPresets();
+        SGSpeedPitchPreset *current = view ? SGSpeedPitchPresetAt(view->_shownSpeed, view->_shownPitch) : nil;
+        NSMutableArray<UIMenuElement *> *choices = [NSMutableArray array];
+        for (SGSpeedPitchPreset *preset in presets) {
+            UIAction *action = [UIAction actionWithTitle:preset.name image:nil identifier:nil handler:^(UIAction *a) {
+                [weakSelf applyPreset:preset];
             }];
-            action.subtitle = subtitle;
-            action.state = i == current ? UIMenuElementStateOn : UIMenuElementStateOff;
-            [actions addObject:action];
+            action.subtitle = presetSubtitle(preset.speed, preset.pitch);
+            action.state = [preset.name isEqualToString:current.name] ? UIMenuElementStateOn : UIMenuElementStateOff;
+            [choices addObject:action];
         }
-        completion(actions);
+        NSMutableArray<UIMenuElement *> *manage = [NSMutableArray array];
+        UIAction *save = [UIAction actionWithTitle:@"Save as Preset…" image:[UIImage systemImageNamed:@"plus"] identifier:nil handler:^(UIAction *a) {
+            [weakSelf askForPresetName];
+        }];
+        if (view) save.subtitle = presetSubtitle(view->_shownSpeed, view->_shownPitch);
+        [manage addObject:save];
+        if (presets.count) {
+            NSMutableArray<UIMenuElement *> *deletions = [NSMutableArray array];
+            for (SGSpeedPitchPreset *preset in presets) {
+                UIAction *removal = [UIAction actionWithTitle:preset.name image:nil identifier:nil handler:^(UIAction *a) {
+                    SGSpeedPitchDeletePreset(preset.name);
+                    [weakSelf showValues];
+                }];
+                removal.attributes = UIMenuElementAttributesDestructive;
+                [deletions addObject:removal];
+            }
+            [manage addObject:[UIMenu menuWithTitle:@"Delete Preset" image:[UIImage systemImageNamed:@"trash"] identifier:nil
+                                            options:0 children:deletions]];
+        }
+        completion(@[[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:choices],
+                     [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:manage]]);
     }];
     button.menu = [UIMenu menuWithTitle:@"" children:@[items]];
     button.showsMenuAsPrimaryAction = YES;
@@ -294,6 +292,7 @@ static NSString *pitchText(float pitch);
     for (UIView *view in @[_presetName, _presetValue, _speedName, _speedValue, _speed, _pitchName, _pitchValue, _pitch]) [_panel addSubview:view];
 
     [self refresh];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(changedElsewhere) name:SGSpeedPitchChangedNotification object:nil];
     return self;
 }
 
@@ -365,8 +364,8 @@ static NSString *pitchText(float pitch) {
         [_speedValue layoutIfNeeded];
         [_pitchValue layoutIfNeeded];
     }];
-    NSInteger preset = presetFor(_shownSpeed, _shownPitch);
-    NSString *presetName = preset >= 0 ? kPresets[preset].name : @"Custom";
+    SGSpeedPitchPreset *preset = SGSpeedPitchPresetAt(_shownSpeed, _shownPitch);
+    NSString *presetName = preset ? preset.name : @"Custom";
     [UIView performWithoutAnimation:^{
         UIButtonConfiguration *configuration = _presetValue.configuration;
         configuration.title = presetName;
@@ -383,8 +382,8 @@ static NSString *pitchText(float pitch) {
     NSMutableArray<NSString *> *changed = [NSMutableArray array];
     if (_shownSpeed != 1) [changed addObject:speedText(_shownSpeed)];
     if (_shownPitch != 0) [changed addObject:[pitchText(_shownPitch) stringByAppendingString:@" st"]];
-    // A preset other than Normal is said by its name, which reads quicker than its two numbers.
-    if (preset > 0) changed = [NSMutableArray arrayWithObject:presetName];
+    // A preset away from normal is said by its name, which reads quicker than its two numbers.
+    if (preset && changed.count) changed = [NSMutableArray arrayWithObject:presetName];
     _summary.text = sg_open ? nil : [changed componentsJoinedByString:@"  "];
     _row.accessibilityLabel = changed.count ? [@"Speed and pitch, " stringByAppendingString:[changed componentsJoinedByString:@", "]] : @"Speed and pitch";
     _row.accessibilityValue = sg_open ? @"Expanded" : @"Collapsed";
@@ -476,9 +475,8 @@ static NSString *pitchText(float pitch) {
 }
 
 // Both sliders to the preset, as far as each can go here: a speed that cannot apply is left alone.
-- (void)applyPreset:(NSInteger)index {
-    if (index < 0 || index >= kPresetCount) return;
-    SGSpeedPitchPreset preset = kPresets[index];
+- (void)applyPreset:(SGSpeedPitchPreset *)preset {
+    if (!preset) return;
     if (SGPlayerSpeedAllowed() && preset.speed != _shownSpeed) {
         _shownSpeed = preset.speed;
         [self sendSpeed];
@@ -492,6 +490,51 @@ static NSString *pitchText(float pitch) {
     SGPlayFeedback(SGFeedbackToggle);
     [self showValues];
     SGLog(@"speed and pitch: preset %@, %.2f× %+.0f st", preset.name, _shownSpeed, _shownPitch);
+}
+
+// The view controller the sheet's block sits in, or whatever it has on top, to put the name prompt over.
+- (UIViewController *)presenter {
+    UIResponder *responder = self;
+    while (responder && ![responder isKindOfClass:UIViewController.class]) responder = responder.nextResponder;
+    UIViewController *controller = (UIViewController *)responder;
+    while (controller.presentedViewController && !controller.presentedViewController.isBeingDismissed) controller = controller.presentedViewController;
+    return controller;
+}
+
+// Asks for a name and saves the speed and pitch the sliders are at under it; a name already taken is
+// replaced, which is how a preset is changed.
+- (void)askForPresetName {
+    float speed = _shownSpeed, pitch = _shownPitch;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save Preset"
+                                                                   message:[NSString stringWithFormat:@"%@, %@. Siri can set it too: \"Set Spotify preset to …\"", speedText(speed), pitch ? [pitchText(pitch) stringByAppendingString:@" st"] : @"original pitch"]
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    alert.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"Name";
+        field.autocapitalizationType = UITextAutocapitalizationTypeWords;
+        field.returnKeyType = UIReturnKeyDone;
+    }];
+    __weak SGSpeedPitchView *weakSelf = self;
+    __weak UIAlertController *weakAlert = alert;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Save" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        NSString *name = [weakAlert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (!name.length) return;
+        SGSpeedPitchSavePreset(name, speed, pitch);
+        SGPlayFeedback(SGFeedbackAdd);
+        [weakSelf showValues];
+    }]];
+    UIViewController *presenter = [self presenter];
+    if (!presenter) {
+        SGLog(@"speed and pitch: nothing to ask a preset's name over");
+        return;
+    }
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+// Speed or pitch set from outside the menu, by Siri or a shortcut.
+- (void)changedElsewhere {
+    [self refresh];
 }
 
 - (void)resetPitch {
@@ -710,4 +753,8 @@ static void install(UIViewController *menu) {
 %ctor {
     %init;
     SGRequireClasses(@[@"_TtC24ContextMenu_InternalImpl25ContextMenuViewController"]);
+    // Siri learns the presets' names once the app is up, so a phrase naming one works from the start.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        SGSpeedPitchPresetsChanged();
+    });
 }
