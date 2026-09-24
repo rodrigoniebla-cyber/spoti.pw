@@ -23,9 +23,13 @@ if [ -n "$PATTERN" ]; then
   for B in "$EXEC" "$APP"/Frameworks/*.framework/*; do
     [ -f "$B" ] && file "$B" | grep -q Mach-O || continue
     section "$(basename "$B"): methods matching $PATTERN"
-    otool -oV "$B" 2>/dev/null | "$(dirname "$0")/objc-methods.py" "$PATTERN" | head -600
+    otool -oV "$B" 2>/dev/null > "$WORK/otool.txt"
+    "$(dirname "$0")/objc-methods.py" "$PATTERN" < "$WORK/otool.txt" | head -800
+    # A sample of the raw listing, for when the parser above no longer reads otool's format.
+    section "$(basename "$B"): otool -oV sample"
+    grep -n -m1 -A70 '_OBJC_CLASS_\$_SPT' "$WORK/otool.txt" | head -70
     section "$(basename "$B"): strings matching $PATTERN"
-    strings -a "$B" | grep -E "$PATTERN" | sort -u | head -300
+    strings -a "$B" | grep -E "$PATTERN" | sort -u | head -900
   done
   rm -rf "$WORK"
   exit 0

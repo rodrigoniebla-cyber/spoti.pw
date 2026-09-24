@@ -17,6 +17,8 @@ APPEX="$OUT/$NAME.appex"
 SHARED="$ROOT/tweak/Sources/Shared/LiveActivity/LiveActivityShared.swift"
 # Speed and pitch presets for Siri and Shortcuts: intents of the app's alone, in the tweak's module.
 PRESETS="$ROOT/tweak/Sources/Shared/Player/SpeedPitchIntents.swift"
+# The rest of the app's Siri actions, and the phrases for all of them.
+SIRI="$ROOT/tweak/Sources/Shared/Siri/SiriIntents.swift"
 WIDGET="$ROOT/extension/LiveActivity/LiveActivityWidget.swift"
 
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
@@ -59,7 +61,7 @@ plutil -convert binary1 "$APPEX/Info.plist"
 
 # The taps' intents run inside Spotify, so Spotify's metadata has to name them too, under the
 # module the tweak compiles them in (Theos names it after the tweak instance). So do the presets'.
-metadata spotifyglass 16.0 "$OUT/app" "$SHARED" "$PRESETS"
+metadata spotifyglass 16.0 "$OUT/app" "$SHARED" "$PRESETS" "$SIRI"
 
 codesign -f -s - "$APPEX" >/dev/null 2>&1
 rm -rf "$WORK"

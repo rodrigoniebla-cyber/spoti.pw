@@ -1,5 +1,6 @@
 // Speed and pitch presets for Siri and Shortcuts: "Set Spotify preset to Nightcore", or the Set Speed
-// and Pitch Preset action in a shortcut of one's own. The presets are the user's (SpeedPitchPresets.m
+// and Pitch Preset action in a shortcut of one's own. The phrases are Shared/Siri/SiriIntents.swift's,
+// with the app's other Siri actions. The presets are the user's (SpeedPitchPresets.m
 // stores them), read here from the mod's settings; setting one is handed back to the Objective-C side by
 // name.
 //
@@ -120,34 +121,5 @@ struct SGResetSpeedPitchIntent: AppIntent {
             return .result(dialog: "Spotify couldn't change its speed or pitch right now.")
         }
         return .result(dialog: "Speed and pitch are back to normal.")
-    }
-}
-
-// The phrases Siri knows without a shortcut being made. Spotify declares none of its own, and an app has
-// only one provider, so this one is it.
-@available(iOS 17.0, *)
-struct SGSpeedPitchShortcuts: AppShortcutsProvider {
-    static var appShortcuts: [AppShortcut] {
-        AppShortcut(intent: SGSetSpeedPitchPresetIntent(), phrases: [
-            "Set \(.applicationName) preset to \(\.$preset)",
-            "Set \(.applicationName) to \(\.$preset)",
-            "Use \(\.$preset) in \(.applicationName)",
-            "\(\.$preset) in \(.applicationName)",
-            "Change \(.applicationName) speed and pitch",
-        ], shortTitle: "Speed and Pitch Preset", systemImageName: "slider.horizontal.3")
-        AppShortcut(intent: SGResetSpeedPitchIntent(), phrases: [
-            "Reset \(.applicationName) speed and pitch",
-            "Reset speed and pitch in \(.applicationName)",
-            "Set \(.applicationName) back to normal speed",
-        ], shortTitle: "Reset Speed and Pitch", systemImageName: "arrow.counterclockwise")
-    }
-}
-
-// For SpeedPitchPresets.m: Siri learns the presets' names again whenever the list changes.
-@available(iOS 17.0, *)
-@objc(SGSpeedPitchShortcutsBridge)
-public final class SGSpeedPitchShortcutsBridge: NSObject {
-    @objc public static func presetsChanged() {
-        SGSpeedPitchShortcuts.updateAppShortcutParameters()
     }
 }
