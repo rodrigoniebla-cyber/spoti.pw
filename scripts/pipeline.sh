@@ -111,21 +111,31 @@ echo "==> injecting"
 # -w drops the Watch app: its companion-app key would still name com.spotify.client and block the install.
 cyan -i "$IN" -o "$OUT" -f "${FILES[@]}" -l "$ROOT/plist/liquid-glass.plist" ${BUNDLE_ID:+-b "$BUNDLE_ID"} ${NAME:+-n "$NAME"} ${ICON:+-k "$ICON"} -w -s --overwrite
 
-echo "==> loading the App Group shim in the home screen widget"
-WIDGET_BIN="${APP_DIR}PlugIns/WidgetExtension.appex/WidgetExtension"
-if unzip -l "$OUT" "$WIDGET_BIN" >/dev/null 2>&1; then
-  PATCH="$(mktemp -d)"
-  unzip -q "$OUT" "$WIDGET_BIN" -d "$PATCH"
-  "$ROOT/scripts/insert-dylib.py" "$PATCH/$WIDGET_BIN" @rpath/SpotifyGlassAppGroups.dylib
+# Every extension of Spotify's reads the app's state through the same groups, not only the widget: the
+# Siri extension that takes "play ... on Spotify" finds no account in its own empty suite and has Siri
+# answer "you'll need to verify your account details in Spotify". So each one gets the shim. Ours, the
+# Live Activity, shares nothing through Spotify's groups and is left alone.
+echo "==> loading the App Group shim in Spotify's extensions"
+PATCH="$(mktemp -d)"
+OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
+PATCHED=0
+for APPEX in $(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | sort -u); do
+  NAME_APPEX="$(basename "$APPEX" .appex)"
+  [ "$NAME_APPEX" = SpotifyGlassLiveActivity ] && continue
+  unzip -q -o "$OUT" "${APPEX}Info.plist" -d "$PATCH"
+  EXEC="$(plutil -extract CFBundleExecutable raw -o - "$PATCH/${APPEX}Info.plist" 2>/dev/null || echo "$NAME_APPEX")"
+  BIN="${APPEX}${EXEC}"
+  unzip -q -o "$OUT" "$BIN" -d "$PATCH" 2>/dev/null || { echo "    $NAME_APPEX: no binary $EXEC"; continue; }
+  "$ROOT/scripts/insert-dylib.py" "$PATCH/$BIN" @rpath/SpotifyGlassAppGroups.dylib || { echo "    $NAME_APPEX left as it is"; continue; }
   # Fakesigned again with its own entitlements, the way cyan -s left it, for TrollStore.
-  ldid -e "$PATCH/$WIDGET_BIN" > "$PATCH/ents.plist"
-  ldid -S"$PATCH/ents.plist" "$PATCH/$WIDGET_BIN"
-  OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
-  (cd "$PATCH" && zip -q "$OUT_ABS" "$WIDGET_BIN")
-  rm -rf "$PATCH"
-else
-  echo "    no WidgetExtension.appex in this IPA"
-fi
+  ldid -e "$PATCH/$BIN" > "$PATCH/ents.plist"
+  ldid -S"$PATCH/ents.plist" "$PATCH/$BIN"
+  (cd "$PATCH" && zip -q "$OUT_ABS" "$BIN")
+  echo "    $NAME_APPEX"
+  PATCHED=$((PATCHED + 1))
+done
+rm -rf "$PATCH"
+[ "$PATCHED" -gt 0 ] || echo "    no extensions of Spotify's in this IPA"
 
 if [ -n "${EXT_DIR:-}" ]; then
   echo "==> adding the Live Activity intents to Spotify's App Intents metadata"

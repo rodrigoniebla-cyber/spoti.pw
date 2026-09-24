@@ -17,11 +17,12 @@
                                 backup and signing, the welcome tour
     tweak/Sources/Diagnostics/  screen dumps, the tree server and the main thread hang sampler of FLEX builds
     extension/LiveActivity/     the Live Activity widget, a WidgetKit extension of its own
-    extension/AppGroups/        a dylib loaded by Spotify and its home screen widget that moves Spotify's App Groups
-                                into a group the re-signed IPA has; without it the widget stays a placeholder
+    extension/AppGroups/        a dylib loaded by Spotify and each of its extensions that moves Spotify's App Groups
+                                into a group the re-signed IPA has; without it the widget stays a placeholder and
+                                Siri asks to verify the account
     scripts/                    pipeline.sh (build + inject), build-extension.sh (the widget extension, without an
                                 Xcode project), merge-appintents.py (the widget's intents into Spotify's), insert-dylib.py (a load command into
-                                Spotify's widget), install.sh (sign + install), record-trees.py, record-session.py,
+                                Spotify's extensions), install.sh (sign + install), record-trees.py, record-session.py,
                                 dump-log.sh, extract-flags.py
     trees/                      recorded view trees, one per screen; the input for every new hook. trees/clean/ holds
                                 the numbered snapshots per screen of record-session.py, taken of Spotify as it came

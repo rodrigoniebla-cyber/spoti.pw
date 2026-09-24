@@ -6,8 +6,11 @@
 // (group.<hash>.N from a paid certificate service, something else from AltStore), each process
 // then gets a private, empty suite, and the widget stays on its "Open Spotify and play" placeholder.
 //
-// This dylib is loaded by both Spotify and WidgetExtension.appex (scripts/pipeline.sh adds the load
-// command to the extension). In each it maps every group.* identifier the process is not entitled
+// The Siri extension is the same story: it looks for the signed in account in the app's groups, finds
+// an empty suite and has Siri answer "you'll need to verify your account details in Spotify".
+//
+// This dylib is loaded by Spotify and by every extension of Spotify's (scripts/pipeline.sh adds the
+// load command to each). In each it maps every group.* identifier the process is not entitled
 // to onto a folder inside one group it is entitled to, the same folder in both processes, so the
 // suites and container files meet again. It is plain runtime swizzling, no Substrate, because the
 // extension carries nothing else of the tweak.
