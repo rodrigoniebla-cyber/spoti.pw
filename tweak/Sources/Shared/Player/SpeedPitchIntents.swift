@@ -116,7 +116,10 @@ struct SGResetSpeedPitchIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let applied = await MainActor.run { SGSpeedPitchApply.reset() }
-        return .result(dialog: applied ? "Speed and pitch are back to normal." : "Spotify couldn't change its speed or pitch right now.")
+        if !applied {
+            return .result(dialog: "Spotify couldn't change its speed or pitch right now.")
+        }
+        return .result(dialog: "Speed and pitch are back to normal.")
     }
 }
 
