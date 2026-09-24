@@ -12,6 +12,10 @@ on:
         default: artifacts
         type: choice
         options: [artifacts, filebin, both]
+      inspect_only:
+        description: "Only print what Spotify's extensions reach for (scripts/inspect-extensions.sh), build nothing"
+        default: false
+        type: boolean
 
 env:
   THEOS: ${{ github.workspace }}/theos
@@ -45,17 +49,22 @@ jobs:
           curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
           case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
 
+      - name: Inspect the extensions
+        if: inputs.inspect_only
+        run: ./scripts/inspect-extensions.sh ipa/spotify.ipa
+
       - run: make release
+        if: ${{ !inputs.inspect_only }}
 
       - uses: actions/upload-artifact@v5
-        if: inputs.upload_method != 'filebin'
+        if: ${{ !inputs.inspect_only && inputs.upload_method != 'filebin' }}
         with:
           name: spoti.ipa
           path: out/*.ipa
           if-no-files-found: error
 
       - name: Upload to filebin.net
-        if: inputs.upload_method != 'artifacts'
+        if: ${{ !inputs.inspect_only && inputs.upload_method != 'artifacts' }}
         run: |
           BIN="spotifyglass-${{ github.run_id }}"
           echo "### filebin.net download" >> "$GITHUB_STEP_SUMMARY"
