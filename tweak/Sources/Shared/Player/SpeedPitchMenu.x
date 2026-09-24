@@ -1,6 +1,7 @@
 // The player's more menu gets Speed and pitch, under either look: one row in Spotify's own context menu
 // sheet that opens, right there in the sheet, onto two sliders, the playback speed and the pitch
-// (SpeedPitch.x applies them).
+// (SpeedPitch.x applies them). Above the sliders a Preset line sets both at once from a short list
+// (slowed, nightcore...); the sliders stay free, and the line says Custom once they leave a preset.
 //
 // The sheet is Spotify's ContextMenu_InternalImpl.ContextMenuViewController, a table of its rows
 // (ContextMenuTableView, sized to its content). Its rows come from Swift item factories with no way in,
@@ -29,7 +30,7 @@
 
 // A menu this soon after the more button's tap is the player's.
 static const NSTimeInterval kMenuAfterTap = 3;
-static const CGFloat kRowHeight = 56, kSliderBlockHeight = 72, kPanelBottom = 12;
+static const CGFloat kRowHeight = 56, kPresetHeight = 44, kSliderBlockHeight = 72, kPanelBottom = 12;
 // The block's own measures and type, so it stands on Spotify's sheet under either look rather than on
 // the redesign's Kit: the sheet's side margin, the gap everything else is a multiple of, and a spring
 // that settles without overshooting.
@@ -77,6 +78,32 @@ static const float kMaxPitch = 12;
 // Speed is applied at most this often while the slider moves.
 static const NSTimeInterval kSpeedInterval = 0.05;
 
+// Speed and pitch together. The slowed and sped up ones move the pitch with the speed the way a record
+// played at another speed does (12 × log2 of the speed, rounded to a semitone); the last two leave the
+// speed alone.
+typedef struct {
+    __unsafe_unretained NSString *name;
+    float speed, pitch;
+} SGSpeedPitchPreset;
+static const SGSpeedPitchPreset kPresets[] = {
+    {@"Normal", 1, 0},
+    {@"Slowed", 0.8f, -4},
+    {@"Slightly slowed", 0.9f, -2},
+    {@"Sped up", 1.15f, 2},
+    {@"Nightcore", 1.3f, 5},
+    {@"Deep", 1, -4},
+    {@"High", 1, 5},
+};
+static const NSInteger kPresetCount = sizeof(kPresets) / sizeof(kPresets[0]);
+
+// The preset speed and pitch are at, or -1 when they are at none.
+static NSInteger presetFor(float speed, float pitch) {
+    for (NSInteger i = 0; i < kPresetCount; i++) {
+        if (fabsf(kPresets[i].speed - speed) < 0.001f && kPresets[i].pitch == pitch) return i;
+    }
+    return -1;
+}
+
 static NSTimeInterval sg_moreTappedAt;
 static BOOL sg_open;
 static char kBlockKey, kDecidedKey, kWatchedKey, kShownAtKey, kRowsInKey;
@@ -93,8 +120,8 @@ static char kBlockKey, kDecidedKey, kWatchedKey, kShownAtKey, kRowsInKey;
     UIImageView *_icon, *_chevron;
     UILabel *_title, *_summary;
     UIView *_panel;
-    UILabel *_speedName, *_pitchName;
-    UIButton *_speedValue, *_pitchValue;
+    UILabel *_presetName, *_speedName, *_pitchName;
+    UIButton *_presetValue, *_speedValue, *_pitchValue;
     UISlider *_speed, *_pitch;
     float _shownSpeed, _shownPitch;
     NSTimeInterval _speedSentAt;
@@ -173,6 +200,50 @@ static void placeTick(UISlider *slider) {
     [slider sendSubviewToBack:tick];
 }
 
+static NSString *speedText(float speed);
+static NSString *pitchText(float pitch);
+
+// The preset's name with an up and down chevron after it, opening the list as a menu on a tap. The list
+// is built each time it opens, so its tick is on whatever the sliders are at then.
+- (UIButton *)presetButton {
+    UIButtonConfiguration *configuration = [UIButtonConfiguration plainButtonConfiguration];
+    configuration.baseForegroundColor = primary();
+    configuration.contentInsets = NSDirectionalEdgeInsetsZero;
+    configuration.image = paintedSymbol(@"chevron.up.chevron.down", 11, UIImageSymbolWeightSemibold, secondary());
+    configuration.imagePlacement = NSDirectionalRectEdgeTrailing;
+    configuration.imagePadding = 6;
+    UIFont *titleFont = font(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge);
+    configuration.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey, id> *(NSDictionary<NSAttributedStringKey, id> *attributes) {
+        NSMutableDictionary *changed = [attributes mutableCopy];
+        changed[NSFontAttributeName] = titleFont;
+        return changed;
+    };
+    UIButton *button = [UIButton buttonWithConfiguration:configuration primaryAction:nil];
+    button.tintColor = primary();
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentTrailing;
+    button.accessibilityLabel = @"Preset";
+    __weak SGSpeedPitchView *weakSelf = self;
+    UIDeferredMenuElement *items = [UIDeferredMenuElement elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *)) {
+        SGSpeedPitchView *view = weakSelf;
+        NSInteger current = view ? presetFor(view->_shownSpeed, view->_shownPitch) : -1;
+        NSMutableArray<UIMenuElement *> *actions = [NSMutableArray array];
+        for (NSInteger i = 0; i < kPresetCount; i++) {
+            NSString *subtitle = [NSString stringWithFormat:@"%@  %@", speedText(kPresets[i].speed),
+                                  kPresets[i].pitch ? [pitchText(kPresets[i].pitch) stringByAppendingString:@" st"] : @"0 st"];
+            UIAction *action = [UIAction actionWithTitle:kPresets[i].name image:nil identifier:nil handler:^(UIAction *a) {
+                [weakSelf applyPreset:i];
+            }];
+            action.subtitle = subtitle;
+            action.state = i == current ? UIMenuElementStateOn : UIMenuElementStateOff;
+            [actions addObject:action];
+        }
+        completion(actions);
+    }];
+    button.menu = [UIMenu menuWithTitle:@"" children:@[items]];
+    button.showsMenuAsPrimaryAction = YES;
+    return button;
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if (!(self = [super initWithFrame:frame])) return nil;
     self.clipsToBounds = YES;
@@ -211,20 +282,23 @@ static void placeTick(UISlider *slider) {
     _speedName.text = @"Speed";
     _pitchName = makeLabel(nameFont, secondary());
     _pitchName.text = @"Pitch";
+    _presetName = makeLabel(nameFont, secondary());
+    _presetName.text = @"Preset";
+    _presetValue = [self presetButton];
     _speedValue = [self valueButton:@selector(resetSpeed)];
     _pitchValue = [self valueButton:@selector(resetPitch)];
     _speed = [self slider:kMinSpeed max:kMaxSpeed normal:1 minImage:@"tortoise.fill" maxImage:@"hare.fill"];
     _speed.accessibilityLabel = @"Speed";
     _pitch = [self slider:-kMaxPitch max:kMaxPitch normal:0 minImage:@"arrow.down" maxImage:@"arrow.up"];
     _pitch.accessibilityLabel = @"Pitch";
-    for (UIView *view in @[_speedName, _speedValue, _speed, _pitchName, _pitchValue, _pitch]) [_panel addSubview:view];
+    for (UIView *view in @[_presetName, _presetValue, _speedName, _speedValue, _speed, _pitchName, _pitchValue, _pitch]) [_panel addSubview:view];
 
     [self refresh];
     return self;
 }
 
 + (CGFloat)heightOpen:(BOOL)open {
-    return kRowHeight + (open ? 2 * kSliderBlockHeight + kPanelBottom : 0);
+    return kRowHeight + (open ? kPresetHeight + 2 * kSliderBlockHeight + kPanelBottom : 0);
 }
 
 - (void)layoutSubviews {
@@ -239,8 +313,10 @@ static void placeTick(UISlider *slider) {
     CGFloat summaryX = CGRectGetMaxX(_title.frame) + kGrid;
     _summary.frame = CGRectMake(summaryX, 0, MAX(0, CGRectGetMinX(_chevron.frame) - kGrid - summaryX), kRowHeight);
 
-    _panel.frame = CGRectMake(0, kRowHeight, width, 2 * kSliderBlockHeight + kPanelBottom);
-    CGFloat y = 0;
+    _panel.frame = CGRectMake(0, kRowHeight, width, kPresetHeight + 2 * kSliderBlockHeight + kPanelBottom);
+    _presetName.frame = CGRectMake(side, (kPresetHeight - 24) / 2 + 2, width / 2 - side, 24);
+    _presetValue.frame = CGRectMake(width / 2, 2, width / 2 - side, kPresetHeight - 4);
+    CGFloat y = kPresetHeight;
     for (NSArray<UIView *> *line in @[@[_speedName, _speedValue, _speed], @[_pitchName, _pitchValue, _pitch]]) {
         line[0].frame = CGRectMake(side, y + 4, width / 2 - side, 24);
         line[1].frame = CGRectMake(width / 2, y + 4, width / 2 - side, 24);
@@ -289,6 +365,16 @@ static NSString *pitchText(float pitch) {
         [_speedValue layoutIfNeeded];
         [_pitchValue layoutIfNeeded];
     }];
+    NSInteger preset = presetFor(_shownSpeed, _shownPitch);
+    NSString *presetName = preset >= 0 ? kPresets[preset].name : @"Custom";
+    [UIView performWithoutAnimation:^{
+        UIButtonConfiguration *configuration = _presetValue.configuration;
+        configuration.title = presetName;
+        _presetValue.configuration = configuration;
+        [_presetValue layoutIfNeeded];
+    }];
+    _presetValue.accessibilityValue = presetName;
+    _presetValue.enabled = speedAllowed || pitchAvailable;
     _speedValue.enabled = speedAllowed && _shownSpeed != 1;
     _pitchValue.enabled = pitchAvailable && _shownPitch != 0;
     _speed.accessibilityValue = speedAllowed ? speedText(_shownSpeed) : @"Unavailable";
@@ -297,6 +383,8 @@ static NSString *pitchText(float pitch) {
     NSMutableArray<NSString *> *changed = [NSMutableArray array];
     if (_shownSpeed != 1) [changed addObject:speedText(_shownSpeed)];
     if (_shownPitch != 0) [changed addObject:[pitchText(_shownPitch) stringByAppendingString:@" st"]];
+    // A preset other than Normal is said by its name, which reads quicker than its two numbers.
+    if (preset > 0) changed = [NSMutableArray arrayWithObject:presetName];
     _summary.text = sg_open ? nil : [changed componentsJoinedByString:@"  "];
     _row.accessibilityLabel = changed.count ? [@"Speed and pitch, " stringByAppendingString:[changed componentsJoinedByString:@", "]] : @"Speed and pitch";
     _row.accessibilityValue = sg_open ? @"Expanded" : @"Collapsed";
@@ -385,6 +473,25 @@ static NSString *pitchText(float pitch) {
     [self sendSpeed];
     [_speed setValue:1 animated:YES];
     [self showValues];
+}
+
+// Both sliders to the preset, as far as each can go here: a speed that cannot apply is left alone.
+- (void)applyPreset:(NSInteger)index {
+    if (index < 0 || index >= kPresetCount) return;
+    SGSpeedPitchPreset preset = kPresets[index];
+    if (SGPlayerSpeedAllowed() && preset.speed != _shownSpeed) {
+        _shownSpeed = preset.speed;
+        [self sendSpeed];
+        [_speed setValue:preset.speed animated:YES];
+    }
+    if (SGPlayerPitchAvailable() && preset.pitch != _shownPitch) {
+        _shownPitch = preset.pitch;
+        SGSetPlayerPitch(preset.pitch);
+        [_pitch setValue:preset.pitch animated:YES];
+    }
+    SGPlayFeedback(SGFeedbackToggle);
+    [self showValues];
+    SGLog(@"speed and pitch: preset %@, %.2f× %+.0f st", preset.name, _shownSpeed, _shownPitch);
 }
 
 - (void)resetPitch {
