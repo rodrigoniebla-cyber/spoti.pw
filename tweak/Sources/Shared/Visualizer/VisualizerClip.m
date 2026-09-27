@@ -66,7 +66,7 @@ static CVPixelBufferRef drawnFrame(CVPixelBufferPoolRef pool, SGVizRenderer *ren
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(CVPixelBufferGetBaseAddress(buffer), (size_t)size.width, (size_t)size.height, 8,
                                                  CVPixelBufferGetBytesPerRow(buffer), space,
-                                                 kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+                                                 (CGBitmapInfo)kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
     CGColorSpaceRelease(space);
     if (context) {
         // The renderer draws the way UIKit does, from the top.

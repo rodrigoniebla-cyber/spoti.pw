@@ -63,7 +63,7 @@ static void toHSB(const CGFloat rgb[3], CGFloat *h, CGFloat *s, CGFloat *b) {
     enum { side = 12 };
     uint8_t pixels[side * side * 4] = {0};
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGContextRef context = CGBitmapContextCreate(pixels, side, side, 8, side * 4, space, kCGImageAlphaPremultipliedLast);
+    CGContextRef context = CGBitmapContextCreate(pixels, side, side, 8, side * 4, space, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
     CGColorSpaceRelease(space);
     if (!context) return;
     CGContextDrawImage(context, CGRectMake(0, 0, side, side), image.CGImage);
