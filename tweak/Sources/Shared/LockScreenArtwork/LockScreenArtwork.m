@@ -5,13 +5,23 @@
 
 NSString *const SGArtworkSourceSpotify = @"spotify";
 NSString *const SGArtworkSourceApple = @"applemusic";
+NSString *const SGArtworkSourceVisualizer = @"visualizer";
+
+// Set once the visualiser has been added to an order stored before it existed, so taking it out holds.
+static NSString *const kVisualizerOffered = @"spotifyglass.lockscreen.visualizerOffered";
 
 NSArray<NSString *> *SGArtworkOrder(void) {
-    id stored = [NSUserDefaults.standardUserDefaults arrayForKey:SGKeyLockScreenArtworkSources];
-    NSArray *keys = [stored isKindOfClass:NSArray.class] ? stored : @[SGArtworkSourceSpotify, SGArtworkSourceApple];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    id stored = [defaults arrayForKey:SGKeyLockScreenArtworkSources];
+    NSArray *keys = [stored isKindOfClass:NSArray.class] ? stored : @[SGArtworkSourceSpotify, SGArtworkSourceApple, SGArtworkSourceVisualizer];
+    if ([stored isKindOfClass:NSArray.class] && ![stored containsObject:SGArtworkSourceVisualizer] && ![defaults boolForKey:kVisualizerOffered]) {
+        keys = [stored arrayByAddingObject:SGArtworkSourceVisualizer];
+        [defaults setObject:keys forKey:SGKeyLockScreenArtworkSources];
+    }
+    if (![defaults boolForKey:kVisualizerOffered]) [defaults setBool:YES forKey:kVisualizerOffered];
     NSMutableArray<NSString *> *order = [NSMutableArray array];
     for (id key in keys) {
-        BOOL known = [key isEqual:SGArtworkSourceSpotify] || [key isEqual:SGArtworkSourceApple];
+        BOOL known = [key isEqual:SGArtworkSourceSpotify] || [key isEqual:SGArtworkSourceApple] || [key isEqual:SGArtworkSourceVisualizer];
         if (known && ![order containsObject:key]) [order addObject:key];
     }
     return order;

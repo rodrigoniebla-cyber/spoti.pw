@@ -7,10 +7,13 @@
 #define SGKeyLockScreenArtwork @"spotifyglass.lockscreen.animatedartwork"
 #define SGKeyLockScreenArtworkSources @"spotifyglass.lockscreen.artworksources"
 
-// Where a clip can come from: the track's Canvas, or the album's animated cover on Apple Music.
+// Where a clip can come from: the track's Canvas, the album's animated cover on Apple Music, or a loop
+// of the visualiser made from the track's own sound (Shared/Visualizer), which every track has.
 extern NSString *const SGArtworkSourceSpotify;
 extern NSString *const SGArtworkSourceApple;
-// The sources in the user's order, the ones switched off left out; Spotify, then Apple Music until set.
+extern NSString *const SGArtworkSourceVisualizer;
+// The sources in the user's order, the ones switched off left out; Spotify, Apple Music, then the
+// visualiser until set. An order stored before the visualiser existed gets it added at its end, once.
 NSArray<NSString *> *SGArtworkOrder(void);
 void SGArtworkSetOrder(NSArray<NSString *> *order);
 

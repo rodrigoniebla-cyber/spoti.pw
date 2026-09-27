@@ -9,6 +9,7 @@
 #import "Headers/SPTPlayer.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/PlayerState.h"
+#import "Shared/Visualizer/Visualizer.h"
 
 static NSString *const kCanvazAddress = @"https://spclient.wg.spotify.com/canvaz-cache/v0/canvases";
 
@@ -101,7 +102,7 @@ static void resend(void) {
 
 static void play(NSString *uri, SGCanvas *canvas, NSString *source) {
     SGLog(@"lock artwork: clip for %@ from %@: %@", uri, source, canvas.address);
-    SGArtworkFetch(canvas.identifier, canvas.address, ^(NSURL *file, NSString *note) {
+    void (^fetched)(NSURL *, NSString *) = ^(NSURL *file, NSString *note) {
         SGLog(@"lock artwork: %@ %@", canvas.identifier, note);
         if (!file) return;
         SGArtworkCrop(file, canvas.identifier, sg_aspect, ^(NSURL *ready, NSString *cropNote) {
@@ -122,7 +123,11 @@ static void play(NSString *uri, SGCanvas *canvas, NSString *source) {
                 });
             });
         });
-    });
+    };
+    // The visualiser's clip is made on the phone; there is nothing to fetch.
+    NSURL *local = [canvas.address hasPrefix:@"file:"] ? [NSURL URLWithString:canvas.address] : nil;
+    if (local) fetched(local, @"made on the phone");
+    else SGArtworkFetch(canvas.identifier, canvas.address, fetched);
 }
 
 static void askCanvaz(NSString *uri, void (^done)(SGCanvas *canvas, NSString *note)) {
@@ -151,6 +156,20 @@ static void ask(NSString *source, NSString *uri, SPTPlayerTrack *track, SGCanvas
     if ([source isEqualToString:SGArtworkSourceSpotify]) {
         if (fromMetadata) done(fromMetadata, @"track metadata");
         else askCanvaz(uri, done);
+        return;
+    }
+    if ([source isEqualToString:SGArtworkSourceVisualizer]) {
+        SGVisualizerClipFor(uri, coverImage(CGSizeMake(600, 600)), sg_aspect, ^(NSURL *file, NSString *note) {
+            if (!file) {
+                done(nil, note);
+                return;
+            }
+            SGCanvas *clip = [SGCanvas new];
+            clip.identifier = file.lastPathComponent.stringByDeletingPathExtension;
+            clip.address = file.absoluteString;
+            clip.video = YES;
+            done(clip, note);
+        });
         return;
     }
     NSDictionary *metadata = [track respondsToSelector:@selector(metadata)] ? track.metadata : nil;

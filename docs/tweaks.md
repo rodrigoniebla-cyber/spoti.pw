@@ -114,6 +114,10 @@ Shared:
                   shape the key wants (Apple's 3:4 cover needs none) and kept under a 120 MB cap. Checked on
                   the Mac against harness/lockart/
     Navigation/   the page transition fix (PageTransition.x) and opening a spotify: link (Links.x)
+    Visualizer/   the music visualiser (Visualizer.h lists its files): Spotify's output taken off its RemoteIO unit as it
+                  plays, analysed live and drawn in place of the player's cover, a tap on the cover switching between
+                  them under either look (both PlayerGestures.x hand the tap over); and a looping clip of it for the lock
+                  screen, made from ten seconds of the track, the last of LockScreenArtwork's sources by default
     Siri/         Siri and Shortcuts actions on Spotify itself (SiriIntents.swift, with the app's one App Shortcuts
                   provider): play the DJ, like or unlike the song playing, download or remove the download of the
                   playlist playing. SiriActions.m calls Spotify's own collection, offline and player services, found

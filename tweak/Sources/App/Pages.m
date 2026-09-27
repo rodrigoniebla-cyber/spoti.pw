@@ -5,6 +5,7 @@
 #import "Shared/ArtistBlock/ArtistBlock.h"
 #import "Shared/Gestures/Gestures.h"
 #import "Shared/Lyrics/Lyrics.h"
+#import "Shared/Visualizer/Visualizer.h"
 #import "Shared/LyricsMeanings/Meanings.h"
 #import "Shared/Player/PlayerSettings.h"
 #import "Native/Appearance/Appearance.h"
@@ -84,6 +85,13 @@ static UIViewController *lyricsPage(void) {
     return [[SGModPage alloc] initWithTitle:@"Lyrics" intro:SGRestartNote sections:sections footer:nil];
 }
 
+// The visualiser draws on the player's cover under either look (Shared/Visualizer).
+static SGModRow *visualizerRow(void) {
+    SGModRow *row = SGPageRow(@"Visualiser", ^UIViewController *{ return SGVisualizerSettingsPage(); });
+    row.value = ^NSString *{ return SGFlag(SGKeyVisualizer, NO) ? @"On" : @"Off"; };
+    return row;
+}
+
 UIViewController *SGPlayerSettingsPage(void) {
     SGModRow *blocked = SGPageRow(@"Blocked artists", ^UIViewController *{ return SGArtistBlockSettingsPage(); });
     blocked.value = ^NSString *{
@@ -94,6 +102,7 @@ UIViewController *SGPlayerSettingsPage(void) {
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObject:SGSection(nil, @[
         SGWithSymbol(SGPageRow(@"Gestures", ^UIViewController *{ return SGGesturesSettingsPage(); }), @"hand.tap"),
         SGWithSymbol(SGPageRow(@"Lyrics", ^UIViewController *{ return lyricsPage(); }), @"quote.bubble"),
+        SGWithSymbol(visualizerRow(), @"waveform"),
         SGWithSymbol(blocked, @"person.crop.circle.badge.xmark"),
     ])];
     NSMutableArray<SGModRow *> *pages = [NSMutableArray array];
