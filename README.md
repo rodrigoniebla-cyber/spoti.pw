@@ -58,6 +58,10 @@ Fork the repo, enable Actions, run **Build IPA from your own Spotify IPA**. It t
 your decrypted `.ipa` and hands the built IPA back as a workflow artifact. No Mac needed; the link is
 masked in the log and the result stays in your fork.
 
+No link? Upload the file instead: **Releases › Draft a new release**, attach the `.ipa`, and choose **Save
+draft** (a draft stays private, even in a public repo). Then run the workflow with the link left empty; it
+takes the newest `.ipa` attached to a release, or the one from the release named in `ipa_release`.
+
 ### Build on a Mac
 
 Theos in `~/theos` and Xcode with an iPhoneOS 26+ SDK (`xcode-select` it). An SDK in `~/theos/sdks`
