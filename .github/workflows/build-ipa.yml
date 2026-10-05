@@ -13,6 +13,10 @@ on:
         required: false
         default: ""
         type: string
+      save_ipa:
+        description: "With a link: also keep the downloaded IPA on a private draft release (tag ipa), so later builds can leave the link empty"
+        default: false
+        type: boolean
       upload_method:
         description: "Where to put the result"
         default: artifacts
@@ -80,6 +84,25 @@ jobs:
             gh api -H "Accept: application/octet-stream" "$ASSET" > ipa/spotify.ipa
           fi
           case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
+
+      - name: Keep the IPA on a draft release
+        if: inputs.save_ipa && inputs.ipa_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A draft stays private even in a public repo.
+          ID=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select(.draft and .tag_name == "ipa")][0].id // empty')
+          if [ -z "$ID" ]; then
+            ID=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" -f tag_name=ipa -f name="Spotify IPA" -F draft=true \
+                   -f body="The decrypted Spotify IPA that build-ipa.yml uses when no link is given. Keep this a draft." --jq .id)
+          fi
+          for OLD in $(gh api "repos/$GITHUB_REPOSITORY/releases/$ID/assets" --jq '.[] | select(.name == "Spotify.ipa") | .id'); do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$OLD"
+          done
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/octet-stream" \
+               --data-binary @ipa/spotify.ipa "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$ID/assets?name=Spotify.ipa" >/dev/null
+          echo "Saved the IPA to the draft release $ID"
+          echo "- The input IPA is saved on the draft release \`ipa\`: later builds can leave the link empty." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Inspect the extensions
         if: inputs.inspect_only
