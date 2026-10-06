@@ -4,63 +4,151 @@ on:
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: "Direct link to a decrypted Spotify IPA"
+        description: "Google Drive file ID or direct URL to the IPA"
         required: true
         type: string
       upload_method:
-        description: "Where to put the result"
-        default: artifacts
+        description: "Mode"
+        default: analyze
         type: choice
-        options: [artifacts, filebin, both]
+        options: [analyze, patch]
 
-env:
-  THEOS: ${{ github.workspace }}/theos
+permissions:
+  contents: write
 
 jobs:
-  build:
-    runs-on: macos-latest
+  ipa-plus:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-
-      - uses: levibostian/action-hide-sensitive-inputs@v1
-
-      - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
-
-      - uses: actions/checkout@v5
-        with:
-          repository: theos/theos
-          path: theos
-          submodules: recursive
+          ref: ${{ github.ref }}
 
       - name: Install tools
         run: |
-          brew install make dpkg ldid
-          python3 -m pip install --break-system-packages git+https://github.com/asdfzxcvbn/pyzule-rw.git
+          sudo apt-get update
+          sudo apt-get install -y zip unzip file jq binutils python3 python3-pip
+          python3 -m pip install --user --break-system-packages requests
 
       - name: Download IPA
+        env:
+          IPA_INPUT: ${{ inputs.ipa_url }}
         run: |
-          mkdir -p ipa
-          curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
-          case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
+          cat > /tmp/download_drive.py <<'PY'
+          import os, re, sys, urllib.parse
+          import requests
 
-      - run: make release
+          src = os.environ['IPA_INPUT'].strip()
+          if re.fullmatch(r'[A-Za-z0-9_-]{20,}', src):
+              file_id = src
+          else:
+              parsed = urllib.parse.urlparse(src)
+              qs = urllib.parse.parse_qs(parsed.query)
+              file_id = (qs.get('id') or [None])[0]
+              if not file_id:
+                  m = re.search(r'/d/([^/]+)', parsed.path)
+                  file_id = m.group(1) if m else None
+              if not file_id:
+                  # Direct URL fallback.
+                  with requests.get(src, stream=True, timeout=60) as r:
+                      r.raise_for_status()
+                      with open('/tmp/input.ipa', 'wb') as f:
+                          for chunk in r.iter_content(1024 * 1024):
+                              if chunk:
+                                  f.write(chunk)
+                  sys.exit(0)
 
-      - uses: actions/upload-artifact@v5
-        if: inputs.upload_method != 'filebin'
-        with:
-          name: spoti.ipa
-          path: out/*.ipa
-          if-no-files-found: error
+          s = requests.Session()
+          base = 'https://drive.google.com/uc?export=download&id=' + urllib.parse.quote(file_id)
+          r = s.get(base, stream=True, timeout=60)
+          ctype = r.headers.get('content-type', '')
+          if 'text/html' not in ctype.lower():
+              with open('/tmp/input.ipa', 'wb') as f:
+                  for chunk in r.iter_content(1024 * 1024):
+                      if chunk:
+                          f.write(chunk)
+              sys.exit(0)
 
-      - name: Upload to filebin.net
-        if: inputs.upload_method != 'artifacts'
+          html = r.text
+          # Google large-file warning form. Keep this deliberately broad; Drive changes markup often.
+          action = re.search(r'<form[^>]+action="([^"]+)"', html)
+          fields = dict(re.findall(r'<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"', html))
+          if action:
+              url = action.group(1).replace('&amp;', '&')
+              if url.startswith('/'):
+                  url = 'https://drive.google.com' + url
+              params = fields
+          else:
+              confirm = None
+              m = re.search(r'confirm=([0-9A-Za-z_\-]+)', html)
+              if m:
+                  confirm = m.group(1)
+              for k, v in s.cookies.items():
+                  if k.startswith('download_warning'):
+                      confirm = v
+              url = 'https://drive.usercontent.google.com/download'
+              params = {'id': file_id, 'export': 'download'}
+              if confirm:
+                  params['confirm'] = confirm
+
+          with s.get(url, params=params, stream=True, timeout=60) as rr:
+              rr.raise_for_status()
+              with open('/tmp/input.ipa', 'wb') as f:
+                  for chunk in rr.iter_content(1024 * 1024):
+                      if chunk:
+                          f.write(chunk)
+          PY
+          python3 /tmp/download_drive.py
+          ls -lh /tmp/input.ipa
+          file /tmp/input.ipa
+          unzip -tq /tmp/input.ipa >/dev/null
+
+      - name: Analyze Plus strings
+        if: inputs.upload_method == 'analyze'
         run: |
-          BIN="spotifyglass-${{ github.run_id }}"
-          echo "### filebin.net download" >> "$GITHUB_STEP_SUMMARY"
-          for f in out/*.ipa; do
-            curl -fsS -X POST -H "Content-Type: application/octet-stream" --data-binary "@$f" "https://filebin.net/$BIN/$(basename "$f")" >/dev/null
-            echo "- https://filebin.net/$BIN/$(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
-          done
-          echo "- _filebin deletes bins after a few days of inactivity, download promptly._" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          rm -rf /tmp/ipa /tmp/plus-analysis
+          mkdir -p /tmp/ipa /tmp/plus-analysis arena-results
+          unzip -q /tmp/input.ipa -d /tmp/ipa
+          APP_DIR="$(find /tmp/ipa/Payload -maxdepth 1 -type d -name '*.app' | head -1)"
+          REPORT="arena-results/ipa-plus-analysis.md"
+          {
+            echo "# IPA Plus analysis"
+            echo
+            echo "Generated: $(date -u +%FT%TZ)"
+            echo "Input size: $(stat -c %s /tmp/input.ipa) bytes"
+            echo "App dir: ${APP_DIR:-unknown}"
+            echo
+            echo "## Top-level bundle files"
+            find "$APP_DIR" -maxdepth 2 -mindepth 1 -printf '%P\n' | sort | sed -n '1,250p'
+            echo
+            echo "## Files containing Plus-related strings"
+            while IFS= read -r -d '' f; do
+              if strings -a "$f" 2>/dev/null | grep -Eiq 'Plus|paywall|purchase|subscription|StoreKit|RevenueCat|unlock|locked|entitlement|license'; then
+                rel="${f#/tmp/ipa/}"
+                echo "### $rel"
+                echo '```'
+                strings -a "$f" 2>/dev/null | grep -Ei 'Plus|paywall|purchase|subscription|StoreKit|RevenueCat|unlock|locked|entitlement|license|supporter|premium|trial|receipt|product|offer' | sort -u | sed -n '1,240p'
+                echo '```'
+                echo
+              fi
+            done < <(find "$APP_DIR" -type f -size +4k -print0)
+            echo
+            echo "## Candidate Mach-O files"
+            find "$APP_DIR" -type f -size +4k -print0 | while IFS= read -r -d '' f; do
+              if file "$f" | grep -q 'Mach-O'; then
+                echo "${f#/tmp/ipa/}: $(file -b "$f")"
+              fi
+            done | sort
+          } > "$REPORT"
+          sed -n '1,220p' "$REPORT"
+
+      - name: Commit analysis
+        if: inputs.upload_method == 'analyze'
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add arena-results/ipa-plus-analysis.md
+          git commit -m 'Analyze Plus gate in IPA' || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
