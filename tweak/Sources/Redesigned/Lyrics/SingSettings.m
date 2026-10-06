@@ -19,8 +19,9 @@ static NSString *aboutSize(void) {
 
 static NSString *footer(void) {
     return [NSString stringWithFormat:@"Sing turns the vocals of the song playing down to sing over, from the microphone in its lyrics. "
-            "It needs iOS 18 or later. Its voice model, %@, is downloaded once and runs only on this iPhone. "
-            "The switch and the download apply straight away.", aboutSize()];
+            "It needs iOS 18 or later and works as it is, on a separator built into the app that turns down what sits in the "
+            "middle of the mix. The voice model, %@, is a cleaner one, downloaded once, and, like the built-in one, runs only "
+            "on this iPhone. The switch and the download apply straight away.", aboutSize()];
 }
 
 static void tell(NSString *title, NSString *message) {
@@ -38,9 +39,9 @@ static NSString *modelStatus(void) {
             return [NSString stringWithFormat:@"Downloading %lld %% · %lld of %@", received * 100 / size,
                     (received + (1ll << 19)) >> 20, SGSingModelBytesText(size)];
         case SGSingModelMissing:
-            if (SGSingModelFailure()) return @"Download failed";
-            if (received > 0) return [NSString stringWithFormat:@"Paused · %lld of %@", (received + (1ll << 19)) >> 20, SGSingModelBytesText(size)];
-            return @"Not downloaded";
+            if (SGSingModelFailure()) return @"Built-in · download failed";
+            if (received > 0) return [NSString stringWithFormat:@"Built-in · paused at %lld of %@", (received + (1ll << 19)) >> 20, SGSingModelBytesText(size)];
+            return @"Built-in separator";
     }
     return nil;
 }
@@ -50,13 +51,14 @@ static void explainModel(void) {
     NSString *failure = SGSingModelFailure();
     switch (SGSingModelCurrentState()) {
         case SGSingModelInstalled:
-            tell(@"Voice model", [NSString stringWithFormat:@"It takes %@ on this iPhone. Remove it to free the space; Sing is unavailable without it.",
+            tell(@"Voice model", [NSString stringWithFormat:@"It takes %@ on this iPhone. Remove it to free the space; Sing goes back to the built-in separator.",
                                   SGSingModelBytesText(SGSingModelSize())]);
             break;
         case SGSingModelMissing:
             tell(failure ? @"Download failed" : @"Voice model",
                  failure ? [failure stringByAppendingString:@" Download goes on from where it stopped."]
-                         : [NSString stringWithFormat:@"Sing needs its voice model, %@, before its microphone shows in the lyrics.", aboutSize()]);
+                         : [NSString stringWithFormat:@"Sing runs on the separator built into the app, which turns down what sits in the middle of the mix: "
+                            "a lead voice, and with it a centred solo or snare. The voice model, %@, separates the voice itself and sounds cleaner.", aboutSize()]);
             break;
         default:
             tell(@"Voice model", @"The download goes on while Spotify is in the background. Sing's microphone shows in the lyrics once it is in.");
@@ -88,7 +90,7 @@ static void startDownload(void) {
 static void confirmRemove(void) {
     BOOL installed = SGSingModelCurrentState() == SGSingModelInstalled;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Remove the voice model?"
-        message:installed ? [NSString stringWithFormat:@"Sing is unavailable until it is downloaded again (%@).", aboutSize()]
+        message:installed ? [NSString stringWithFormat:@"Sing goes back to the built-in separator until it is downloaded again (%@).", aboutSize()]
                           : [NSString stringWithFormat:@"The %@ downloaded so far are deleted, and the next download starts over.",
                              SGSingModelBytesText(SGSingModelReceived())]
         preferredStyle:UIAlertControllerStyleAlert];
@@ -118,7 +120,7 @@ static SGModSection *karaokeSection(void) {
     };
     model.refreshOn = SGSingModelDidChangeNotification;
 
-    SGModRow *download = SGActionRow(@"Download voice model", nil, ^{ startDownload(); });
+    SGModRow *download = SGActionRow(@"Download the cleaner voice model", nil, ^{ startDownload(); });
     download.visible = ^BOOL { return SGSingModelCurrentState() == SGSingModelMissing; };
     SGModRow *cancel = SGActionRow(@"Cancel download", nil, ^{ SGSingModelCancel(); });
     cancel.visible = ^BOOL {

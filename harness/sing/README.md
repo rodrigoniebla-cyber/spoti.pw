@@ -195,9 +195,20 @@ python harness/sing/export_coreml.py zoo ref MelBandRoformer.ckpt build/goldens/
 
 The model the app downloads is that public-tools export (`export.unpinnedPayloadHashes`).
 
+## The built-in separator
+
+Without the downloaded model Sing runs on `Shared/Sing/SGStemCenterSeparator.swift`, which `SGSingModelPath`
+names with `SGSingModelBuiltIn` and `SGStemWorker.swift` swaps in for the Core ML one: the same two-second spectrum
+goes in and the same one comes out, so the window processor, the stream and the mixer do not know the difference.
+It keeps what is centred in the stereo image above about 150 Hz (a mask of how alike the two channels are,
+smoothed over time and frequency, times the mid signal). `python3 harness/sing/center_test.py` is the same
+arithmetic on a synthetic mix: a centred voice kept at full level, the kick and bass 23 dB or more down, parts
+panned to a side or wide 100 dB down. It is not neural: another centred instrument goes with the voice, and a song
+in mono has no middle to tell it from.
+
 ## The model on the phone
 
-The model is not in the IPA. In the redesigned look, **Mod Settings → Karaoke**
+The cleaner model is not in the IPA. In the redesigned look, **Mod Settings → Karaoke**
 has Sing's switch, which puts the microphone in the player's lyrics and takes it away at once (off,
 Sing does no work), and the voice model's row: Not downloaded, Downloading 43 % · 210 of 467 MB with
 a bar under it and Cancel download, Checking…, Downloaded · 467 MB with Remove voice model, or

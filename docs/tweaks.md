@@ -268,7 +268,7 @@ Redesigned:
                   sheet, and a sheet with no rows within 4 s is shown as it is. It opens on the rows the last
                   menu had, kept across launches, and moves to Spotify's as they come in, a tap meanwhile held
                   until they do. Always on in the redesign. Tested in the simulator against harness/playermenu/
-                  With Sing on and its voice model downloaded (Mod Settings > Karaoke, Redesigned/Lyrics/SingSettings.m,
+                  With Sing on, on the built-in separator or the downloaded voice model (Mod Settings > Karaoke, Redesigned/Lyrics/SingSettings.m,
                   both applying at once), its microphone (Redesigned/Lyrics/SGRSingControl.m) sits in the
                   lyrics' bottom trailing corner, opposite their glass button, and goes down with the lines when the
                   controls go; while it is open, preparing or explaining itself the controls stay, and a touch on it
@@ -398,7 +398,7 @@ is set. Redesigned UI is the one switch between the two looks (see Layers): it g
 The pages show only what the stored look has: a page opened after flipping the switch already shows
 what the restart will bring. In the redesign Karaoke comes next, on a card of its own: Sing's switch and its
 voice model's download (Redesigned/Lyrics/SingSettings.m), with Off, On, No model or the download's percentage
-beside the row, "Needs iOS 18" below iOS 18. Then a card of parts. Navbar: the tab editor of the stored look,
+beside the row, "Needs iOS 18" below iOS 18. Sing needs no download: without the model it runs on the built-in separator (Shared/Sing/SGStemCenterSeparator.swift, which keeps what is centred in the stereo image above 150 Hz; harness/sing/center_test.py has its arithmetic), and the model's row reads "Built-in separator". Then a card of parts. Navbar: the tab editor of the stored look,
 each with its own list of tabs. Lyrics, beside Player: the ordered list of lyrics sources, lyrics for every track,
 naming the source in the redesign, the lock screen, and glass lyrics in the native look; in the redesign also
 which of the lyrics, their pronunciation and their translation is set largest, and the translation's language.

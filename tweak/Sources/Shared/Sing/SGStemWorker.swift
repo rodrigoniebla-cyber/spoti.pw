@@ -12,20 +12,21 @@ private enum StemState: Int32 { case loading = 1, ready, finished, failed }
 private let packetFrames = 1024
 private let warmSeconds = 60                    // how long the model outlives the last worker using it
 private let idlePoll = Duration.milliseconds(25) // how soon a worker with nothing to read looks again
+let sgStemBuiltInPath = "builtin:center"        // SGSingModelBuiltIn, in SGSingModel.h
 
 // One warm model, shared by the workers that follow each other and kept for a while after the last
 // one ends. A load in flight is shared too, and one made stale by a purge never becomes the warm model.
 @available(iOS 18.0, macOS 15.0, *)
 private actor SGStemModels {
     static let shared = SGStemModels()
-    private var model: SGStemSeparator?
+    private var model: (any SGStemSeparating)?
     private var path: String?
-    private var loading: Task<SGStemSeparator, Error>?
+    private var loading: Task<any SGStemSeparating, Error>?
     private var epoch: UInt64 = 0
     private var loadEpoch: UInt64 = 0
     private var users = 0
 
-    func acquire(path: String) async throws -> SGStemSeparator {
+    func acquire(path: String) async throws -> any SGStemSeparating {
         epoch &+= 1
         users += 1
         if self.path == path, let model { return model }
@@ -34,7 +35,9 @@ private actor SGStemModels {
         if loading == nil {
             loadEpoch &+= 1
             loading = Task {
-                let separator = try await SGStemSeparator(modelURL: URL(fileURLWithPath: path))
+                // The path SGSingModel.h names for "no model" is the built-in separator's.
+                let separator: any SGStemSeparating = path == sgStemBuiltInPath
+                    ? try SGStemCenterSeparator() : try await SGStemSeparator(modelURL: URL(fileURLWithPath: path))
                 try await separator.warmUp()
                 try Task.checkCancellation()
                 return separator

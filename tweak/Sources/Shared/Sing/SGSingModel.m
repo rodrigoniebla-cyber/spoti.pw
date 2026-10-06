@@ -380,9 +380,13 @@ int64_t SGSingModelReceived(void) {
 
 NSString *SGSingModelFailure(void) { return sg_failure; }
 
+NSString *const SGSingModelBuiltIn = @"builtin:center";
+
+BOOL SGSingModelIsBuiltIn(NSString *path) { return [path isEqualToString:SGSingModelBuiltIn]; }
+
 NSString *SGSingModelPath(void) {
     load();
-    return sg_installed ? installedModel().path : nil;
+    return sg_installed ? installedModel().path : SGSingModelBuiltIn;
 }
 
 NSString *SGSingModelBytesText(int64_t bytes) {

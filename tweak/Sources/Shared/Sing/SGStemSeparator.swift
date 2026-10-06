@@ -25,8 +25,16 @@ enum SGStemShape {
     static let spectrumCount = spectrum.reduce(1, *)
 }
 
+// What the worker runs a window through: the Core ML model, or the built-in one (SGStemCenterSeparator.swift).
 @available(iOS 18.0, macOS 15.0, *)
-actor SGStemSeparator {
+protocol SGStemSeparating: Sendable {
+    var windowFrames: Int { get }
+    func warmUp() async throws
+    func vocals(for pcm: [Float]) async throws -> [Float]
+}
+
+@available(iOS 18.0, macOS 15.0, *)
+actor SGStemSeparator: SGStemSeparating {
     let windowFrames = SGStemShape.windowFrames
     private let cpu: MLModel
     private var gpu: MLModel?            // nil when it could not be loaded; the CPU model then does everything

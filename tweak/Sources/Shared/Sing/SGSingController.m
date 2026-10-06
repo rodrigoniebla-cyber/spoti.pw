@@ -111,7 +111,7 @@ static void workerStatus(void *context, int32_t status) {
     if (!(self = [super init])) return nil;
     _retired = [NSMutableSet set];
     _level = _reduced = SGSingMinimumVocalLevel;
-    // Without its voice model Sing is unavailable and shows nothing; Mod Settings > Karaoke says why and gets it.
+    // Without the downloaded voice model Sing runs on the built-in separator; Mod Settings > Karaoke gets the better one.
     _model = SGSingModelPath();
     _state = _model ? SGSingIdle : SGSingUnavailable;
     SGAddPlayerStateObserver(self);
@@ -408,8 +408,10 @@ static void workerStatus(void *context, int32_t status) {
 - (void)modelChanged:(NSNotification *)note {
     NSString *model = SGSingModelPath();
     if (model == _model || [model isEqualToString:_model]) return;
+    // The model's files are about to go, or the separator it was is replaced: what runs on it lets go of it first.
+    BOOL wasInstalled = _model && !SGSingModelIsBuiltIn(_model);
     _model = model;
-    if (!model) {
+    if (!model || wasInstalled) {
         _wanted = NO; _blockedTrack = nil; _waitingForCommand = NO;
         [self stop:NO unload:YES];
     }
