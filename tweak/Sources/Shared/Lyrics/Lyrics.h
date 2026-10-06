@@ -27,7 +27,8 @@ SGModSection *SGLyricsOfflineSection(void);
 // Read, which reads the disk and belongs off the main thread when it can be.
 void SGLyricsStoreStart(void);
 BOOL SGLyricsStoreHas(NSString *trackID);
-NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, NSString **credit);
+@class SGLyricsCredit;
+NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, SGLyricsCredit **credit);
 void SGLyricsStoreWrite(NSString *trackID, NSArray<SGKaraokeLine *> *lines);
 NSUInteger SGLyricsStoreCount(void);
 void SGLyricsStoreClear(void);

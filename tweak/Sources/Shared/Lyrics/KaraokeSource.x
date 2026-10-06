@@ -129,7 +129,7 @@ NSArray<SGKaraokeLine *> *SGKaraokeLinesForTrack(NSString *trackID) {
     if (!trackID) return nil;
     NSArray<SGKaraokeLine *> *lines = sg_lyrics[trackID];
     if (lines || !sg_offline || !SGLyricsStoreHas(trackID)) return lines;
-    NSString *credit = nil;
+    SGLyricsCredit *credit = nil;
     lines = SGLyricsStoreRead(trackID, &credit);
     // Into memory, on the main queue it belongs to, without writing the file it came from again.
     if (lines && NSThread.isMainThread) {

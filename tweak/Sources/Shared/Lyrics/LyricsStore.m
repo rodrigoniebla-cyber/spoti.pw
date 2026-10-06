@@ -120,7 +120,45 @@ BOOL SGLyricsStoreHas(NSString *trackID) {
     @synchronized (sg_index) { return [sg_index containsObject:trackID]; }
 }
 
-NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, NSString **credit) {
+// The credit as a property list: its text, whether it must show, and its links. A file written before
+// credits had links holds the text alone.
+static NSDictionary *plistOfCredit(SGLyricsCredit *credit) {
+    if (!credit.text.length) return nil;
+    NSMutableDictionary *plist = [@{@"text": credit.text, @"required": @(credit.required)} mutableCopy];
+    NSMutableArray<NSString *> *titles = [NSMutableArray array], *links = [NSMutableArray array];
+    for (NSUInteger i = 0; i < credit.links.count && i < credit.linkTitles.count; i++) {
+        if (!credit.links[i].absoluteString || !credit.linkTitles[i]) continue;
+        [titles addObject:credit.linkTitles[i]];
+        [links addObject:credit.links[i].absoluteString];
+    }
+    if (links.count) {
+        plist[@"linkTitles"] = titles;
+        plist[@"links"] = links;
+    }
+    return plist;
+}
+
+static SGLyricsCredit *creditOfPlist(id plist) {
+    if ([plist isKindOfClass:NSString.class]) return [plist length] ? SGLyricsCreditNamed(plist) : nil;
+    if (![plist isKindOfClass:NSDictionary.class] || ![plist[@"text"] isKindOfClass:NSString.class]) return nil;
+    SGLyricsCredit *credit = SGLyricsCreditNamed(plist[@"text"]);
+    credit.required = [plist[@"required"] respondsToSelector:@selector(boolValue)] && [plist[@"required"] boolValue];
+    NSArray *titles = [plist[@"linkTitles"] isKindOfClass:NSArray.class] ? plist[@"linkTitles"] : @[];
+    NSArray *links = [plist[@"links"] isKindOfClass:NSArray.class] ? plist[@"links"] : @[];
+    NSMutableArray<NSString *> *keptTitles = [NSMutableArray array];
+    NSMutableArray<NSURL *> *keptLinks = [NSMutableArray array];
+    for (NSUInteger i = 0; i < titles.count && i < links.count; i++) {
+        NSURL *link = [links[i] isKindOfClass:NSString.class] ? [NSURL URLWithString:links[i]] : nil;
+        if (!link || ![titles[i] isKindOfClass:NSString.class]) continue;
+        [keptTitles addObject:titles[i]];
+        [keptLinks addObject:link];
+    }
+    credit.linkTitles = keptTitles;
+    credit.links = keptLinks;
+    return credit;
+}
+
+NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, SGLyricsCredit **credit) {
     if (!SGLyricsStoreHas(trackID)) return nil;
     NSURL *file = fileFor(trackID);
     NSData *data = file ? [NSData dataWithContentsOfURL:file] : nil;
@@ -134,7 +172,7 @@ NSArray<SGKaraokeLine *> *SGLyricsStoreRead(NSString *trackID, NSString **credit
         SGKaraokeLine *line = lineOfPlist(plist);
         if (line) [lines addObject:line];
     }
-    if (credit) *credit = [root[@"credit"] isKindOfClass:NSString.class] ? root[@"credit"] : nil;
+    if (credit) *credit = creditOfPlist(root[@"credit"]);
     return lines.count ? lines : nil;
 }
 
@@ -145,7 +183,7 @@ void SGLyricsStoreWrite(NSString *trackID, NSArray<SGKaraokeLine *> *lines) {
         NSMutableArray *plists = [NSMutableArray arrayWithCapacity:kept.count];
         for (SGKaraokeLine *line in kept) [plists addObject:plistOfLine(line)];
         NSMutableDictionary *root = [@{@"lines": plists, @"saved": [NSDate date]} mutableCopy];
-        NSString *credit = SGLyricsCreditFor(trackID);
+        NSDictionary *credit = plistOfCredit(SGLyricsCreditFor(trackID));
         if (credit) root[@"credit"] = credit;
         NSData *data = [NSPropertyListSerialization dataWithPropertyList:root format:NSPropertyListBinaryFormat_v1_0 options:0 error:NULL];
         if (![data writeToURL:fileFor(trackID) options:NSDataWritingAtomic error:NULL]) return;
