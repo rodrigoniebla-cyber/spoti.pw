@@ -1,6 +1,8 @@
 name: Build IPA from your own Spotify IPA
 
 on:
+  push:
+    branches: [arena/363a3401-spoti-pw]
   workflow_dispatch:
     inputs:
       ipa_url:
@@ -32,7 +34,7 @@ jobs:
 
       - name: Download IPA
         env:
-          IPA_INPUT: ${{ inputs.ipa_url }}
+          IPA_INPUT: ${{ inputs.ipa_url || '1NjDGboA7c6PQ3sNauWFWzhG4YCeqQ5Q6' }}
         run: |
           cat > /tmp/download_drive.py <<'PY'
           import os, re, sys, urllib.parse
@@ -104,7 +106,7 @@ jobs:
           unzip -tq /tmp/input.ipa >/dev/null
 
       - name: Analyze Plus strings
-        if: inputs.upload_method == 'analyze'
+        if: github.event_name == 'push' || inputs.upload_method == 'analyze'
         run: |
           set -euo pipefail
           rm -rf /tmp/ipa /tmp/plus-analysis
@@ -144,7 +146,7 @@ jobs:
           sed -n '1,220p' "$REPORT"
 
       - name: Commit analysis
-        if: inputs.upload_method == 'analyze'
+        if: github.event_name == 'push' || inputs.upload_method == 'analyze'
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
