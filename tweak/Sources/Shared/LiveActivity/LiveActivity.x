@@ -112,18 +112,16 @@ static NSInteger repeatModeOf(SPTPlayerOptions *options) {
 static __weak MPMediaItemArtwork *sg_tintOf;
 static NSInteger sg_tint = -1;
 
-static NSInteger coverTint(void) {
-    id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
-    if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return sg_tint;
-    if (artwork == sg_tintOf) return sg_tint;
-    sg_tintOf = artwork;
-    UIImage *image = [(MPMediaItemArtwork *)artwork imageWithSize:CGSizeMake(32, 32)];
-    if (!image.CGImage) return sg_tint;
+// Spotify's artwork handler is not ours to call on the main thread: it can wait on that thread itself, which
+// froze the app the moment a song started. The cover is read on a queue of its own and its tint kept for the
+// next tick; the first ticks of a new cover carry the last one's.
+static NSInteger tintOfImage(UIImage *image) {
+    if (!image.CGImage) return -1;
     unsigned char pixel[4] = {0};
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGContextRef context = CGBitmapContextCreate(pixel, 1, 1, 8, 4, space, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
     CGColorSpaceRelease(space);
-    if (!context) return sg_tint;
+    if (!context) return -1;
     CGContextSetInterpolationQuality(context, kCGInterpolationMedium);
     CGContextDrawImage(context, CGRectMake(0, 0, 1, 1), image.CGImage);
     CGContextRelease(context);
@@ -133,7 +131,21 @@ static NSInteger coverTint(void) {
     UIColor *lifted = [UIColor colorWithHue:hue saturation:MIN(1, saturation * 1.2) brightness:MAX(0.55, brightness) alpha:1];
     CGFloat r, g, b;
     [lifted getRed:&r green:&g blue:&b alpha:NULL];
-    sg_tint = (NSInteger)lround(r * 255) << 16 | (NSInteger)lround(g * 255) << 8 | (NSInteger)lround(b * 255);
+    return (NSInteger)lround(r * 255) << 16 | (NSInteger)lround(g * 255) << 8 | (NSInteger)lround(b * 255);
+}
+
+static NSInteger coverTint(void) {
+    id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
+    if (![artwork isKindOfClass:MPMediaItemArtwork.class] || artwork == sg_tintOf) return sg_tint;
+    sg_tintOf = artwork;
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("spotifyglass.cover-tint", DISPATCH_QUEUE_SERIAL); });
+    MPMediaItemArtwork *cover = artwork;
+    dispatch_async(queue, ^{
+        NSInteger tint = tintOfImage([cover imageWithSize:CGSizeMake(32, 32)]);
+        if (tint >= 0) dispatch_async(dispatch_get_main_queue(), ^{ if (cover == sg_tintOf) sg_tint = tint; });
+    });
     return sg_tint;
 }
 
