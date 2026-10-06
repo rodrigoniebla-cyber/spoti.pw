@@ -193,7 +193,7 @@ static const NSTimeInterval kFlushInterval = 30;
         // Kept in time order, the playing listen's place moving with it.
         NSArray *playing = _eventIndex >= 0 && _eventIndex < (NSInteger)_events.count ? _events[(NSUInteger)_eventIndex] : nil;
         [_events sortUsingComparator:^NSComparisonResult(NSArray *a, NSArray *b) { return [a[0] compare:b[0]]; }];
-        if (playing) _eventIndex = (NSInteger)[_events indexOfObjectIdenticalTo:playing];
+        if (playing) _eventIndex = (NSInteger)[_events indexOfObjectIdenticalTo:(NSMutableArray *)playing];
         _dirty = YES;
         [self save];
     }
