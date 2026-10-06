@@ -24,6 +24,7 @@ static NSString *const kSpclientHeaders[] = {@"authorization", @"client-token", 
 
 static NSMutableDictionary<NSString *, NSArray<SGKaraokeLine *> *> *sg_lyrics;
 static NSMutableSet<NSString *> *sg_requested;
+static NSMutableSet<NSString *> *sg_fromDisk;   // being kept from the phone, not to be written back
 // Of those, the ones with a request still out or waiting out its pause. A full cache spares their lines
 // and leaves them asked for, so no second request runs beside the first.
 static NSMutableSet<NSString *> *sg_asking;
@@ -93,6 +94,24 @@ static void keep(NSString *track, NSArray<SGKaraokeLine *> *lines) {
     }
     sg_lyrics[track] = lines;
     [NSNotificationCenter.defaultCenter postNotificationName:SGKaraokeLinesDidChangeNotification object:track];
+    // Lines read back from the phone are already there as they are.
+    if (![sg_fromDisk containsObject:track]) SGLyricsOfflineSave(track, lines);
+    [sg_fromDisk removeObject:track];
+}
+
+// A song whose lyrics were saved (LyricsOffline.m) takes them from the phone, before anyone is asked; YES when
+// it is being read. Lines that do not read come back to the usual sources on the next ask.
+static BOOL keepSaved(NSString *trackID) {
+    if (!trackID || sg_lyrics[trackID] || !SGLyricsOfflineHas(trackID)) return NO;
+    if (!sg_fromDisk) sg_fromDisk = [NSMutableSet set];
+    [sg_requested addObject:trackID];
+    SGLyricsOfflineRead(trackID, ^(NSArray<SGKaraokeLine *> *lines) {
+        if (!lines) { [sg_requested removeObject:trackID]; return; }
+        if (sg_lyrics[trackID]) return;   // the network was quicker
+        [sg_fromDisk addObject:trackID];
+        keep(trackID, lines);
+    });
+    return YES;
 }
 
 void SGKaraokeKeepLines(NSString *track, NSArray<SGKaraokeLine *> *lines) {
@@ -193,6 +212,7 @@ void SGKaraokeAskSpotifyForTiming(NSString *trackID) {
 
 void SGKaraokeRequestLyrics(NSString *trackID) {
     if (!trackID || sg_lyrics[trackID] || [sg_requested containsObject:trackID]) return;
+    if (keepSaved(trackID)) return;
     if (SGKaraokeIsLocalTrack(trackID)) {
         SGLocalLyricsFetch(trackID);
         return;
@@ -306,7 +326,7 @@ static void prefetch(SPTPlayerTrack *track, NSString *trackID, SPTPlayerState *s
         SGLocalLyricsFetch(trackID);
         return;
     }
-    if (!sg_ownSources) return;
+    if (keepSaved(trackID) || !sg_ownSources) return;
     SGLyricsPrefetch(trackID);
     SPTPlayerTrack *next = upNextIn(state);
     NSString *nextID = idOf(next);

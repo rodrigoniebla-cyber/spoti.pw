@@ -81,7 +81,10 @@ Shared:
     Lyrics/       the lyrics engine for the redesign's Apple Music style lyrics and the lock screen: lines read from
                   color-lyrics and the player's clock (KaraokeSource.x), words timed by estimate inside Spotify's line
                   times (KaraokeTiming.m), which line to name where two voices sing at once (the one that came in first,
-                  for the lock screen and the Live Activity), and the Lyrics page's parts
+                  for the lock screen and the Live Activity), and the Lyrics page's parts; every song's lines, once
+                  they load, are saved on the phone (LyricsOffline.m, Lyrics > Save lyrics offline, on until switched
+                  off, at most 3000 songs, the least read going first) and read back before any source is asked, so
+                  they show at once and without a connection
     LyricsSources/ the sources lyrics come from, asked in the order the Lyrics page puts them in and merged into the
                   best answer (LyricsSources.m, the list to drag in LyricsSourcesPage.m): Apple Music's TTML from
                   BiniLyrics.m and Unison.m, read by SGTTML.m, which carries a second voice and the
@@ -164,8 +167,9 @@ Shared:
                   system's faces and Spotify's SpotifyMix and Circular ones only, so icon fonts are left alone;
                   the new font is made with the hooks stood down by a per-thread flag, and cached
     Visualizer/   a ring of bars moving with the music, NCS style: the finished sound off Audio/SGAudioPipeline's last
-                  stage (SGAudioStageVisualizer, VisualizerTap.x) into a single writer ring, only while a ring is on
-                  screen; once a frame the newest 2048 samples go through a Hann window and an FFT into log spaced
+                  stage (SGAudioStageVisualizer, VisualizerTap.x, which joins the pipeline only when a ring first
+                  shows, never at launch: registered there it froze Spotify as a song started) into a single writer
+                  ring, only while a ring is on screen, and rings drawn in the same frame share one analysis; once a frame the newest 2048 samples go through a Hann window and an FFT into log spaced
                   bands against the loudest lately (SGSpectrum.m, plain C, harness/visualizer/), following
                   everything, the beat or the bass at a strength, as Music Haptics does or with Music Haptics' own
                   settings; SGVisualizerView draws them as bars, a wave or dots on a display link run the lyrics'

@@ -18,6 +18,16 @@ SGModRow *SGLockScreenLyricsPlaceRow(void);   // where the line shows, while the
 SGModRow *SGLyricsTranslationLanguageRow(void);
 SGModRow *SGLyricsWordTimingRow(void);
 
+// LyricsOffline.m: every song's lines kept on this iPhone once they load, read back before anyone is asked,
+// so they show at once and without a connection. Main queue throughout; Read answers on it.
+#define SGKeyLyricsOffline @"spotifyglass.lyricsOffline"   // on until switched off
+BOOL SGLyricsOfflineEnabled(void);
+BOOL SGLyricsOfflineHas(NSString *trackID);
+@class SGKaraokeLine;
+void SGLyricsOfflineRead(NSString *trackID, void (^done)(NSArray<SGKaraokeLine *> *lines));
+void SGLyricsOfflineSave(NSString *trackID, NSArray<SGKaraokeLine *> *lines);
+NSArray<SGModRow *> *SGLyricsOfflineRows(void);   // the switch and the saved songs, with Remove
+
 // Sweeps a line timed only by the line word by word, on the estimate of when each word is sung, as if
 // the source had timed them. Off, such a line lights up whole as it starts. Off by default: the
 // estimate is a guess dressed up as timing.
