@@ -18,8 +18,12 @@
 // applies to the next event.
 //
 // The rebinding and the notify are in place under either look, so the switch works at once;
-// with the switch off the notify returns straight away. Nothing listens while Spotify is not the active
-// app, since iOS plays no haptics for an app in the background. Sound that is not Spotify's own
+// with the switch off the notify returns straight away. iOS plays no Core Haptics for an app in the
+// background, so while Spotify is not the active app (the screen locked, another app open) the taps go to
+// the vibration that alarms use instead (AudioServicesPlaySystemSoundWithVibration, which an app playing
+// audio may call from the background): a short buzz per kick and snare, as hard as the tap would be, no
+// closer together than kBuzzGap, and no rumble, which a buzz that long would turn into a phone call's.
+// Sound that is not Spotify's own
 // output (Connect, AirPlay to another device, video) never passes the unit, and plays no haptics.
 //
 // Threading: the notify runs on the render thread and only touches atomics, the analyzer and the
@@ -28,6 +32,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 #import <CoreHaptics/CoreHaptics.h>
+#import <dlfcn.h>
 #import <mach/mach_time.h>
 #import <os/lock.h>
 #import <pthread.h>
@@ -55,6 +60,9 @@ static const NSTimeInterval kRumbleLength = 30;
 static const double kQuietAfter = 0.1, kQuietAfterBuffers = 2.5, kEngineStopAfter = 5;
 // An engine that would not start is not asked again for this long.
 static const double kStartRetryAfter = 2;
+// In the background: buzzes are at least this far apart, and last between these, by the tap's strength.
+static const double kBuzzGap = 0.12;
+static const double kBuzzShortest = 0.015, kBuzzLongest = 0.045;
 
 enum { kRingSize = 1024, kMonoFrames = 4096 };
 
@@ -390,6 +398,38 @@ static void playLevel(const SGMusicEvent *event) {
     sg_rumbleSent = level;
 }
 
+#pragma mark - the background
+
+// AudioToolbox's own, found at run time: a system sound with a vibration pattern of its own, given as
+// {VibePattern: [on, milliseconds, ...], Intensity: 0 to 1}.
+typedef void (*SGPlayVibration)(SystemSoundID sound, id unused, NSDictionary *pattern);
+
+static void playBuzz(const SGMusicEvent *event) {
+    static SGPlayVibration vibrate;
+    static dispatch_queue_t queue;
+    static double lastHeard;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        vibrate = (SGPlayVibration)dlsym(RTLD_DEFAULT, "AudioServicesPlaySystemSoundWithVibration");
+        queue = dispatch_queue_create("spotifyglass.music-haptics.buzz", DISPATCH_QUEUE_SERIAL);
+        SGLog(@"music haptics: in the background with %@", vibrate ? @"short buzzes" : @"the plain vibration only");
+    });
+    double heard = hostSeconds(event->hostTime) + loadDouble(&sg_latencyBits);
+    double lead = heard - hostSeconds(mach_absolute_time());
+    if (lead < -kLatestTap || heard - lastHeard < (vibrate ? kBuzzGap : 0.5)) return;
+    float intensity = MIN(1, event->intensity * kTapGain * strength());
+    // The plain vibration is long and always as hard, so without the pattern only strong kicks get one.
+    if (!vibrate && (event->kind != SGMusicEventKick || intensity < 0.6f)) return;
+    lastHeard = heard;
+    int milliseconds = (int)lround((kBuzzShortest + (kBuzzLongest - kBuzzShortest) * intensity) * 1000);
+    NSDictionary *pattern = @{@"VibePattern": @[@YES, @(milliseconds)], @"Intensity": @(MAX(0.2f, intensity))};
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(MAX(0, lead) * NSEC_PER_SEC)), queue, ^{
+        if (vibrate) vibrate(kSystemSoundID_Vibrate, nil, pattern);
+        else AudioServicesPlaySystemSound(kSystemSoundID_Vibrate);
+    });
+    sg_stats.taps++;
+}
+
 static void report(void) {
     static double lastReport;
     static int reports;
@@ -431,7 +471,15 @@ static void *playerLoop(void *unused) {
             if (!rumbles) stopRumble(CHHapticTimeImmediate);
             BOOL any = NO;
             unsigned head = atomic_load(&sg_head), tail = atomic_load(&sg_tail);
-            if (tail != head && startEngine()) {
+            if (tail != head && !atomic_load(&sg_active)) {
+                // Core Haptics stops for an app in the background; the vibration takes the taps.
+                stopEngine();
+                for (; tail != head; tail++) {
+                    SGMusicEvent event = sg_ring[tail & (kRingSize - 1)];
+                    if (event.kind == SGMusicEventKick || (event.kind != SGMusicEventLevel && snares)) playBuzz(&event);
+                }
+                any = YES;
+            } else if (tail != head && startEngine()) {
                 for (; tail != head; tail++) {
                     SGMusicEvent event = sg_ring[tail & (kRingSize - 1)];
                     if (event.kind == SGMusicEventLevel) {
@@ -469,8 +517,13 @@ static void readLatency(void) {
 }
 
 static void updateListening(void) {
-    BOOL listening = atomic_load(&sg_enabled) && atomic_load(&sg_active);
-    if (atomic_exchange(&sg_listening, listening) == listening) return;
+    // In the background too, where the taps become buzzes (playBuzz).
+    BOOL listening = atomic_load(&sg_enabled);
+    if (atomic_exchange(&sg_listening, listening) == listening) {
+        // Into or out of the background: the loop swaps Core Haptics for the vibration, or back.
+        dispatch_semaphore_signal(sg_wake);
+        return;
+    }
     if (listening) {
         atomic_fetch_add(&sg_generation, 1);
         readLatency();
