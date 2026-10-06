@@ -1,4 +1,4 @@
-// The visualizer's tap (Visualizer.h): Audio/SGAudioPipeline's last stage, so what is read is what is heard.
+// The visualizer's tap (Visualizer.h): Audio/SGAudioPipeline's last stage, joined when a ring first shows, so what is read is what is heard.
 // The render callback only folds the buffer to mono and copies it into SGSpectrum's ring, and only while
 // a ring is on screen; the analysis runs on the main thread, once a frame, in SGVisualizerReadBars.
 #import "Core/SGCore.h"
@@ -79,7 +79,25 @@ static OSStatus rendered(void *refCon, AudioUnitRenderActionFlags *flags, const 
     return noErr;
 }
 
+static void settingsChanged(void);
+
+// The stage joins the pipeline the first time a ring shows, not at launch, so nobody without a ring on
+// screen carries it: it once froze Spotify as a song started, for everyone, visualizer on or off. Joining
+// late misses the prepare of the output already running, so its format is read here instead.
+static void join(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        static const SGAudioProcessor processor = {readFormat, rendered};
+        if (!SGAudioPipelineRegister(SGAudioStageVisualizer, &processor)) return;
+        AudioUnit unit = SGAudioPipelineOutputUnit();
+        if (unit) readFormat(unit);
+        [NSNotificationCenter.defaultCenter addObserverForName:SGVisualizerSettingsDidChangeNotification object:nil
+                                                         queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { settingsChanged(); }];
+    });
+}
+
 void SGVisualizerSetListening(BOOL listening) {
+    if (listening && !SGOff("visualizer")) join();
     atomic_store(&sg_listening, listening);
 }
 
@@ -112,6 +130,22 @@ static float sg_strength = 1;
 BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed) {
     if (!bars || count <= 0) return NO;
     count = MIN(count, (NSInteger)SGSpectrumMaxBands);
+    // Rings drawn in the same frame share one analysis: a second read would take the first's sound.
+    static float lastBars[SGSpectrumMaxBands];
+    static NSInteger lastCount;
+    static CFTimeInterval lastAt;
+    static BOOL lastHeard;
+    CFTimeInterval at = CACurrentMediaTime();
+    if (count == lastCount && at - lastAt < 0.004) {
+        memcpy(bars, lastBars, sizeof(float) * count);
+        return lastHeard;
+    }
+    // Music Haptics' strength and what it follows can change on their own page; read again now and then.
+    static CFTimeInterval settingsAt;
+    if (at - settingsAt > 1) {
+        settingsAt = at;
+        settingsChanged();
+    }
     double now = rate();
     if (count != sg_count || now != sg_rate) {
         sg_follows = follows();
@@ -120,12 +154,14 @@ BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed) {
         sg_count = count;
         sg_rate = now;
     }
-    if (!SGSpectrumRingRead(&sg_ring, sg_window) || !SGAudioPipelineTapped()) {
-        SGSpectrumDecay(&sg_analyzer, elapsed, bars);
-        return NO;
-    }
-    SGSpectrumProcess(&sg_analyzer, sg_window, elapsed, sg_strength, bars);
-    return YES;
+    BOOL heard = SGSpectrumRingRead(&sg_ring, sg_window) && SGAudioPipelineTapped();
+    if (heard) SGSpectrumProcess(&sg_analyzer, sg_window, elapsed, sg_strength, bars);
+    else SGSpectrumDecay(&sg_analyzer, elapsed, bars);
+    memcpy(lastBars, bars, sizeof(float) * count);
+    lastCount = count;
+    lastAt = at;
+    lastHeard = heard;
+    return heard;
 }
 
 static void settingsChanged(void) {
@@ -133,16 +169,4 @@ static void settingsChanged(void) {
     sg_strength = strength();
     SGSpectrumFollows now = follows();
     if (now != sg_follows) sg_count = 0;
-}
-
-%ctor {
-    if (SGOff("visualizer")) return;
-    static const SGAudioProcessor processor = {readFormat, rendered};
-    if (!SGAudioPipelineRegister(SGAudioStageVisualizer, &processor)) return;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        for (NSNotificationName name in @[SGVisualizerSettingsDidChangeNotification, NSUserDefaultsDidChangeNotification]) {
-            [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
-                                                        usingBlock:^(NSNotification *note) { settingsChanged(); }];
-        }
-    });
 }

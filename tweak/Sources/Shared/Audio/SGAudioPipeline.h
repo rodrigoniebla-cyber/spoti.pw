@@ -25,6 +25,9 @@ typedef struct {
 bool SGAudioPipelineRegister(SGAudioStage stage, const SGAudioProcessor *processor);
 bool SGAudioPipelineAvailable(void);
 bool SGAudioPipelineTapped(void);
+// The RemoteIO unit the processors follow, NULL before Spotify started one. For a stage registered late,
+// to read the format its prepare would have; never from the render thread.
+AudioUnit SGAudioPipelineOutputUnit(void);
 UInt32 SGAudioPipelineMaximumFrames(void);
 // Input to speed/pitch: the mixer in unique sample-time chunks, then source-domain processing.
 OSStatus SGAudioPipelinePull(UInt32 frames, AudioBufferList *data, const AudioTimeStamp *time);

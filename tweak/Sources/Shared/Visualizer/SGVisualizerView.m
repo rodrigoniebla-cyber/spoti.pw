@@ -26,7 +26,14 @@ static void showing(NSInteger change) {
     NSInteger _count;
     SGVisualizerStyle _style;
     SGVisualizerColor _color;
-    BOOL _mirror, _counted;
+    BOOL _mirror, _counted, _covered;
+    NSUInteger _frames;
+}
+
+// Shown as far as its ancestors go: none hidden or faded out (a queue cell's ring, a closed player's).
+static BOOL onScreen(UIView *view) {
+    for (UIView *at = view; at; at = at.superview) if (at.hidden || at.alpha < 0.01) return NO;
+    return view.window != nil;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -141,8 +148,10 @@ static void showing(NSInteger change) {
 }
 
 - (void)tick:(CADisplayLink *)link {
-    // Faded out with the cover (a clip over the field, the lyrics in the player): nothing to draw.
-    if (self.alpha < 0.01) {
+    // Faded out with the cover (a clip over the field, the lyrics in the player), or inside something hidden
+    // or faded (asked twice a second, a walk up the views being too dear for every frame): nothing to draw.
+    if (_frames++ % 30 == 0) _covered = !onScreen(self);
+    if (self.alpha < 0.01 || _covered) {
         _last = 0;
         return;
     }

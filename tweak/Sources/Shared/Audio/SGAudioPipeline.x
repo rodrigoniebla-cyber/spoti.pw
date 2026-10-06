@@ -87,6 +87,7 @@ static void forget(Route *route) {
 
 bool SGAudioPipelineAvailable(void) { return atomic_load(&available); }
 bool SGAudioPipelineTapped(void) { return atomic_load(&sourceUnit) != NULL; }
+AudioUnit SGAudioPipelineOutputUnit(void) { return atomic_load(&outputUnit); }
 UInt32 SGAudioPipelineMaximumFrames(void) { return atomic_load(&maximumFrames); }
 void SGAudioPipelineSetPullProcessor(SGAudioPullProcessor processor) { atomic_store(&pullProcessor, processor); }
 bool SGAudioPipelineSetSourceProcessor(SGAudioSourceProcessor processor, void *context) {
