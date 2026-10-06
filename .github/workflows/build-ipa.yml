@@ -11,7 +11,7 @@ on:
         type: string
       upload_method:
         description: "Mode"
-        default: analyze
+        default: patch
         type: choice
         options: [analyze, patch]
 
@@ -20,7 +20,8 @@ permissions:
 
 jobs:
   ipa-plus:
-    runs-on: ubuntu-latest
+    # macOS gives us a maintained Homebrew ldid for re-fakesigning the patched dylib.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -28,14 +29,16 @@ jobs:
 
       - name: Install tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zip unzip file jq binutils python3 python3-pip
-          python3 -m pip install --user --break-system-packages requests
+          set -euo pipefail
+          brew install ldid || echo "ldid unavailable from Homebrew; the patcher will continue and leave installer-side re-signing if needed"
+          command -v ldid || true
+          python3 -m pip install --user requests || python3 -m pip install --user --break-system-packages requests
 
       - name: Download IPA
         env:
           IPA_INPUT: ${{ inputs.ipa_url || '1NjDGboA7c6PQ3sNauWFWzhG4YCeqQ5Q6' }}
         run: |
+          set -euo pipefail
           cat > /tmp/download_drive.py <<'PY'
           import os, re, sys, urllib.parse
           import requests
@@ -106,43 +109,44 @@ jobs:
           unzip -tq /tmp/input.ipa >/dev/null
 
       - name: Analyze Plus strings
-        if: github.event_name == 'push' || inputs.upload_method == 'analyze'
+        if: inputs.upload_method == 'analyze'
         run: |
           set -euo pipefail
-          rm -rf /tmp/ipa /tmp/plus-analysis
-          mkdir -p /tmp/ipa /tmp/plus-analysis arena-results
+          rm -rf /tmp/ipa
+          mkdir -p /tmp/ipa arena-results
           unzip -q /tmp/input.ipa -d /tmp/ipa
           APP_DIR="$(find /tmp/ipa/Payload -maxdepth 1 -type d -name '*.app' | head -1)"
           REPORT="arena-results/ipa-plus-analysis.md"
-          {
-            echo "# IPA Plus analysis"
-            echo
-            echo "Generated: $(date -u +%FT%TZ)"
-            echo "Input size: $(stat -c %s /tmp/input.ipa) bytes"
-            echo "App dir: ${APP_DIR:-unknown}"
-            echo
-            echo "## Top-level bundle files"
-            find "$APP_DIR" -maxdepth 2 -mindepth 1 -printf '%P\n' | sort | sed -n '1,250p'
-            echo
-            echo "## Files containing Plus-related strings"
-            while IFS= read -r -d '' f; do
-              if strings -a "$f" 2>/dev/null | grep -Eiq 'Plus|paywall|purchase|subscription|StoreKit|RevenueCat|unlock|locked|entitlement|license'; then
-                rel="${f#/tmp/ipa/}"
-                echo "### $rel"
-                echo '```'
-                strings -a "$f" 2>/dev/null | grep -Ei 'Plus|paywall|purchase|subscription|StoreKit|RevenueCat|unlock|locked|entitlement|license|supporter|premium|trial|receipt|product|offer' | sort -u | sed -n '1,240p'
-                echo '```'
-                echo
-              fi
-            done < <(find "$APP_DIR" -type f -size +4k -print0)
-            echo
-            echo "## Candidate Mach-O files"
-            find "$APP_DIR" -type f -size +4k -print0 | while IFS= read -r -d '' f; do
-              if file "$f" | grep -q 'Mach-O'; then
-                echo "${f#/tmp/ipa/}: $(file -b "$f")"
-              fi
-            done | sort
-          } > "$REPORT"
+          python3 - <<'PY' "$APP_DIR" "$REPORT" /tmp/input.ipa
+          from pathlib import Path
+          import os, subprocess, sys
+          app = Path(sys.argv[1])
+          report = Path(sys.argv[2])
+          ipa = Path(sys.argv[3])
+          needles = ('plus','paywall','purchase','subscription','storekit','unlock','locked','entitlement','license','supporter','premium','trial','receipt','product','offer')
+          with report.open('w', encoding='utf-8') as out:
+              out.write('# IPA Plus analysis\n\n')
+              out.write(f'Input size: {ipa.stat().st_size} bytes\n')
+              out.write(f'App dir: {app}\n\n')
+              out.write('## Top-level bundle files\n')
+              for p in sorted(app.rglob('*'))[:300]:
+                  if p.is_file() or p.is_dir():
+                      try:
+                          out.write(str(p.relative_to(app)) + '\n')
+                      except Exception:
+                          pass
+              out.write('\n## Files containing Plus-related strings\n')
+              for p in sorted(x for x in app.rglob('*') if x.is_file() and x.stat().st_size > 4096):
+                  try:
+                      text = subprocess.check_output(['strings','-a',str(p)], text=True, errors='ignore')
+                  except Exception:
+                      continue
+                  hits = sorted({line for line in text.splitlines() if any(n in line.lower() for n in needles)})[:240]
+                  if hits:
+                      out.write(f'### {p.relative_to(app.parent.parent)}\n```\n')
+                      out.write('\n'.join(hits))
+                      out.write('\n```\n\n')
+          PY
           if [ -f "$APP_DIR/Frameworks/spotifyglass.dylib" ]; then
             cp "$APP_DIR/Frameworks/spotifyglass.dylib" arena-results/spotifyglass.dylib
             gzip -9c "$APP_DIR/Frameworks/spotifyglass.dylib" > arena-results/spotifyglass.dylib.gz
@@ -150,11 +154,75 @@ jobs:
           sed -n '1,220p' "$REPORT"
 
       - name: Commit analysis
-        if: github.event_name == 'push' || inputs.upload_method == 'analyze'
+        if: inputs.upload_method == 'analyze'
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add arena-results/ipa-plus-analysis.md arena-results/spotifyglass.dylib arena-results/spotifyglass.dylib.gz
           git commit -m 'Analyze Plus gate in IPA' || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
+
+      - name: Patch IPA in-place
+        if: github.event_name == 'push' || inputs.upload_method == 'patch'
+        run: |
+          set -euo pipefail
+          python3 scripts/patch-ipa-noplus.py /tmp/input.ipa -o /tmp/spoti.pw-0.50.0-noplus.ipa
+          ls -lh /tmp/spoti.pw-0.50.0-noplus.ipa
+          shasum -a 256 /tmp/spoti.pw-0.50.0-noplus.ipa
+
+      - name: Upload patched IPA artifact
+        if: github.event_name == 'push' || inputs.upload_method == 'patch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spoti-pw-0.50.0-noplus-ipa
+          path: /tmp/spoti.pw-0.50.0-noplus.ipa
+          retention-days: 7
+
+      - name: Upload patched IPA to filebin
+        if: github.event_name == 'push' || inputs.upload_method == 'patch'
+        run: |
+          set -euo pipefail
+          BIN="spoti-pw-noplus-${GITHUB_RUN_ID}"
+          NAME="spoti.pw-0.50.0-noplus.ipa"
+          URL="https://filebin.net/${BIN}/${NAME}"
+          curl --fail --retry 3 --retry-delay 5 --upload-file /tmp/spoti.pw-0.50.0-noplus.ipa "$URL"
+          SHA256="$(shasum -a 256 /tmp/spoti.pw-0.50.0-noplus.ipa | awk '{print $1}')"
+          SIZE="$(python3 - <<'PY'
+          from pathlib import Path
+          print(Path('/tmp/spoti.pw-0.50.0-noplus.ipa').stat().st_size)
+          PY
+          )"
+          mkdir -p arena-results
+          cat > arena-results/patched-ipa-link.md <<EOF
+          # Patched IPA
+
+          - Output: \`spoti.pw-0.50.0-noplus.ipa\`
+          - Download: ${URL}
+          - GitHub Actions artifact: \`spoti-pw-0.50.0-noplus-ipa\` on run ${GITHUB_RUN_ID}
+          - Size: ${SIZE} bytes
+          - SHA-256: \`${SHA256}\`
+
+          Patch applied to \`Payload/Spotify.app/Frameworks/spotifyglass.dylib\`:
+
+          - \`-[SGModRow plus] -> false\`
+          - \`-[SGModPage plusFeature] -> nil\`
+          - \`-[SGOrderController plusFeature] -> nil\`
+          - \`-[SGPage plusLocked] -> false\`
+          - \`-[SGModPage locks:] -> false\`
+          - \`-[SGOrderController locked] -> false\`
+          - \`-[SGModSliderCell locked] -> false\`
+          - \`-[SGDSPSliderCell locked] -> false\`
+          - \`-[SGDSPErrorPage offeredPlus] -> false\`
+          EOF
+          cat arena-results/patched-ipa-link.md
+
+      - name: Commit patch link
+        if: github.event_name == 'push' || inputs.upload_method == 'patch'
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add arena-results/patched-ipa-link.md
+          git commit -m 'Add patched IPA download link' || exit 0
           git push origin HEAD:${GITHUB_REF_NAME}
