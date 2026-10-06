@@ -1,6 +1,6 @@
 # IPA Plus analysis
 
-Generated: 2026-10-06T01:51:07Z
+Generated: 2026-10-06T01:52:18Z
 Input size: 134571602 bytes
 App dir: /tmp/ipa/Payload/Spotify.app
 
