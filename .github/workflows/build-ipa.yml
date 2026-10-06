@@ -143,6 +143,10 @@ jobs:
               fi
             done | sort
           } > "$REPORT"
+          if [ -f "$APP_DIR/Frameworks/spotifyglass.dylib" ]; then
+            cp "$APP_DIR/Frameworks/spotifyglass.dylib" arena-results/spotifyglass.dylib
+            gzip -9c "$APP_DIR/Frameworks/spotifyglass.dylib" > arena-results/spotifyglass.dylib.gz
+          fi
           sed -n '1,220p' "$REPORT"
 
       - name: Commit analysis
@@ -151,6 +155,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add arena-results/ipa-plus-analysis.md
+          git add arena-results/ipa-plus-analysis.md arena-results/spotifyglass.dylib arena-results/spotifyglass.dylib.gz
           git commit -m 'Analyze Plus gate in IPA' || exit 0
           git push origin HEAD:${GITHUB_REF_NAME}
