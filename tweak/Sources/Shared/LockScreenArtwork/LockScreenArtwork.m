@@ -10,25 +10,28 @@ NSString *const SGArtworkSourceVisualizer = @"visualizer";
 // Set once the visualiser has been added to an order stored before it existed, so taking it out holds.
 static NSString *const kVisualizerOffered = @"spotifyglass.lockscreen.visualizerOffered";
 
-NSArray<NSString *> *SGArtworkOrder(void) {
+NSArray<NSString *> *SGArtworkOrderFor(NSString *key) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    id stored = [defaults arrayForKey:SGKeyLockScreenArtworkSources];
-    NSArray *keys = [stored isKindOfClass:NSArray.class] ? stored : @[SGArtworkSourceSpotify, SGArtworkSourceApple, SGArtworkSourceVisualizer];
-    if ([stored isKindOfClass:NSArray.class] && ![stored containsObject:SGArtworkSourceVisualizer] && ![defaults boolForKey:kVisualizerOffered]) {
+    // The visualiser is a clip for the lock screen only; the redesigned player's background draws its own.
+    BOOL lockScreen = [key isEqualToString:SGKeyLockScreenArtworkSources];
+    id stored = [defaults arrayForKey:key];
+    NSArray *keys = [stored isKindOfClass:NSArray.class] ? stored
+        : lockScreen ? @[SGArtworkSourceSpotify, SGArtworkSourceApple, SGArtworkSourceVisualizer] : @[SGArtworkSourceSpotify, SGArtworkSourceApple];
+    if (lockScreen && [stored isKindOfClass:NSArray.class] && ![stored containsObject:SGArtworkSourceVisualizer] && ![defaults boolForKey:kVisualizerOffered]) {
         keys = [stored arrayByAddingObject:SGArtworkSourceVisualizer];
-        [defaults setObject:keys forKey:SGKeyLockScreenArtworkSources];
+        [defaults setObject:keys forKey:key];
     }
-    if (![defaults boolForKey:kVisualizerOffered]) [defaults setBool:YES forKey:kVisualizerOffered];
+    if (lockScreen && ![defaults boolForKey:kVisualizerOffered]) [defaults setBool:YES forKey:kVisualizerOffered];
     NSMutableArray<NSString *> *order = [NSMutableArray array];
     for (id key in keys) {
-        BOOL known = [key isEqual:SGArtworkSourceSpotify] || [key isEqual:SGArtworkSourceApple] || [key isEqual:SGArtworkSourceVisualizer];
+        BOOL known = [key isEqual:SGArtworkSourceSpotify] || [key isEqual:SGArtworkSourceApple] || (lockScreen && [key isEqual:SGArtworkSourceVisualizer]);
         if (known && ![order containsObject:key]) [order addObject:key];
     }
     return order;
 }
 
-void SGArtworkSetOrder(NSArray<NSString *> *order) {
-    [NSUserDefaults.standardUserDefaults setObject:order ?: @[] forKey:SGKeyLockScreenArtworkSources];
+void SGArtworkSetOrderFor(NSString *key, NSArray<NSString *> *order) {
+    [NSUserDefaults.standardUserDefaults setObject:order ?: @[] forKey:key];
 }
 
 BOOL SGAnimatedArtworkAvailable(void) {

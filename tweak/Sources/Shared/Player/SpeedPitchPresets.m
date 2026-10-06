@@ -5,7 +5,7 @@
 #import <objc/message.h>
 #import "SpeedPitch.h"
 
-NSString *const SGSpeedPitchChangedNotification = @"SGSpeedPitchChanged";
+NSString *const SGSpeedPitchSetElsewhereNotification = @"SGSpeedPitchSetElsewhere";
 
 @implementation SGSpeedPitchPreset
 @end
@@ -91,6 +91,11 @@ void SGSpeedPitchDeletePreset(NSString *name) {
     SGLog(@"speed and pitch: preset %@ deleted", name);
 }
 
+void SGSpeedPitchPrepareFor(SGSpeedPitchPreset *preset) {
+    // Pitch following speed would leave a preset's own pitch out, so a preset that has one turns it off.
+    if (preset.pitch != 0 && SGPlayerPitchFollowsSpeed()) SGSetPlayerPitchFollowsSpeed(NO);
+}
+
 BOOL SGSpeedPitchApplyPreset(NSString *name) {
     SGSpeedPitchPreset *found = nil;
     for (SGSpeedPitchPreset *preset in SGSpeedPitchPresets()) {
@@ -101,11 +106,12 @@ BOOL SGSpeedPitchApplyPreset(NSString *name) {
     }
     if (!found) return NO;
     BOOL speed = SGPlayerSpeedAllowed(), pitch = SGPlayerPitchAvailable();
+    SGSpeedPitchPrepareFor(found);
     if (speed) SGSetPlayerSpeed(found.speed);
     if (pitch) SGSetPlayerPitch(found.pitch);
     SGLog(@"speed and pitch: preset %@ set from outside the menu (speed %@, pitch %@)", found.name,
           speed ? @"set" : @"unavailable", pitch ? @"set" : @"unavailable");
-    [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchSetElsewhereNotification object:nil];
     return speed || pitch;
 }
 
@@ -123,7 +129,7 @@ BOOL SGSpeedPitchResetFromIntent(void) {
     if (speed) SGSetPlayerSpeed(1);
     if (pitch) SGSetPlayerPitch(0);
     SGLog(@"speed and pitch: reset from outside the menu");
-    [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchSetElsewhereNotification object:nil];
     return speed || pitch;
 }
 

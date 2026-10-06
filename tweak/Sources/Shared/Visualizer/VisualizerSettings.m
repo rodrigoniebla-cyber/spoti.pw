@@ -105,7 +105,7 @@ static SGModRow *lockRow(void) {
     return SGStatRow(@"On the lock screen", ^NSString *{
         if (!SGAnimatedArtworkAvailable()) return @"Needs iOS 26";
         if (!SGFlag(SGKeyLockScreenArtwork, YES)) return @"Animated lock screen off";
-        NSArray<NSString *> *order = SGArtworkOrder();
+        NSArray<NSString *> *order = SGArtworkOrderFor(SGKeyLockScreenArtworkSources);
         NSUInteger at = [order indexOfObject:SGArtworkSourceVisualizer];
         if (at == NSNotFound) return @"Off";
         return at == 0 ? @"Every song" : @"When there is no clip";

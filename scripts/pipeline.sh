@@ -109,7 +109,12 @@ FILES+=("$GROUPS_DYLIB")
 
 echo "==> injecting"
 # -w drops the Watch app: its companion-app key would still name com.spotify.client and block the install.
-cyan -i "$IN" -o "$OUT" -f "${FILES[@]}" -l "$ROOT/plist/liquid-glass.plist" ${BUNDLE_ID:+-b "$BUNDLE_ID"} ${NAME:+-n "$NAME"} ${ICON:+-k "$ICON"} -w -s --overwrite
+unzip -p "$IN" "${APP_DIR}Info.plist" > "$ROOT/out/.info.plist"
+python3 "$ROOT/scripts/merge-local-network-plist.py" "$ROOT/out/.info.plist" \
+  "$ROOT/plist/liquid-glass.plist" "$ROOT/out/.injection.plist"
+rm -f "$ROOT/out/.info.plist"
+cyan -i "$IN" -o "$OUT" -f "${FILES[@]}" -l "$ROOT/out/.injection.plist" ${BUNDLE_ID:+-b "$BUNDLE_ID"} ${NAME:+-n "$NAME"} ${ICON:+-k "$ICON"} -w -s --overwrite
+rm -f "$ROOT/out/.injection.plist"
 
 # Every extension of Spotify's reads the app's state through the same groups, not only the widget: the
 # Siri extension that takes "play ... on Spotify" finds no account in its own empty suite and has Siri
@@ -136,6 +141,10 @@ for APPEX in $(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | 
 done
 rm -rf "$PATCH"
 [ "$PATCHED" -gt 0 ] || echo "    no extensions of Spotify's in this IPA"
+
+echo "==> adding the alternate app icons"
+# A failure leaves the IPA as it was, without them; Mod > App icon then does not show.
+"$ROOT/scripts/app-icons.sh" "$OUT" || echo "    the app icons failed: building without them"
 
 if [ -n "${EXT_DIR:-}" ]; then
   echo "==> adding the Live Activity intents to Spotify's App Intents metadata"

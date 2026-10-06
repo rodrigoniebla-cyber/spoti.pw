@@ -1,11 +1,8 @@
-// The visualiser's ear: every RemoteIO unit Spotify starts gets a render notify, the way Music Haptics
-// listens (Shared/Haptics/MusicHaptics.x has the whole story of the unit and its format). After each
-// render the buffer bound for the speaker goes into a ring, mixed to mono, with the host time its last
+// The visualiser's ear: the last stage of Shared/Audio/SGAudioPipeline's render notify on Spotify's RemoteIO
+// unit, after speed and pitch, the effects and Music Haptics, so it hears what the speaker plays (MusicHaptics.x
+// has the whole story of the unit and its format). After each render the buffer goes into a ring, mixed to mono, with the host time its last
 // sample will be heard: the render's timestamp plus AVAudioSession's output latency, large over
 // Bluetooth. A reader asks for the samples heard at a given moment, so what is drawn is what is heard.
-//
-// Spotify's import of AudioOutputUnitStart is rebound here as well: each file that rebinds it keeps what
-// the slot held before, so the calls pass through every one of them in turn.
 //
 // Threading: the notify runs on the render thread and touches only atomics and the ring; the ring is read
 // from any thread, a torn read costing a sample or two of one frame.
@@ -14,7 +11,7 @@
 #import <mach/mach_time.h>
 #import <stdatomic.h>
 #import "Core/SGCore.h"
-#import "Core/SGRebind.h"
+#import "Shared/Audio/SGAudioPipeline.h"
 #import "Visualizer.h"
 
 enum { kRingSize = 1 << 16, kMonoFrames = 4096 };   // about 1.4 s at 48 kHz
@@ -109,8 +106,6 @@ void SGVisualizerTapRelease(void) {
 
 #pragma mark - the output unit
 
-static OSStatus (*sg_startOutput)(AudioUnit unit);
-
 static void readFormat(AudioUnit unit) {
     AudioStreamBasicDescription format = {0};
     UInt32 size = sizeof format;
@@ -129,27 +124,6 @@ static void readFormat(AudioUnit unit) {
     atomic_store(&sg_layout, layout);
 }
 
-static void formatChanged(void *refCon, AudioUnit unit, AudioUnitPropertyID property, AudioUnitScope scope, AudioUnitElement element) {
-    if (property == kAudioUnitProperty_StreamFormat && scope == kAudioUnitScope_Output && element == 0) readFormat(unit);
-}
-
-static void listenTo(AudioUnit unit) {
-    AudioComponentDescription description = {0};
-    if (AudioComponentGetDescription(AudioComponentInstanceGetComponent(unit), &description) != noErr) return;
-    if (description.componentType != kAudioUnitType_Output || description.componentSubType != kAudioUnitSubType_RemoteIO) return;
-    AudioUnitRemoveRenderNotify(unit, rendered, NULL);
-    AudioUnitRemovePropertyListenerWithUserData(unit, kAudioUnitProperty_StreamFormat, formatChanged, NULL);
-    AudioUnitAddPropertyListener(unit, kAudioUnitProperty_StreamFormat, formatChanged, NULL);
-    readFormat(unit);
-    OSStatus status = AudioUnitAddRenderNotify(unit, rendered, NULL);
-    if (status != noErr) SGLog(@"visualizer: the render notify could not be added (%d)", (int)status);
-}
-
-static OSStatus startOutput(AudioUnit unit) {
-    if (unit) listenTo(unit);
-    return sg_startOutput(unit);
-}
-
 static void readLatency(void) {
     storeDouble(&sg_latencyBits, AVAudioSession.sharedInstance.outputLatency);
 }
@@ -158,8 +132,10 @@ static void readLatency(void) {
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
     sg_secondsPerTick = (double)timebase.numer / timebase.denom / 1e9;
-    if (!SGRebindImport("AudioOutputUnitStart", startOutput, (void **)&sg_startOutput) || !sg_startOutput) {
-        SGLog(@"visualizer: Spotify does not import AudioOutputUnitStart, the visualiser hears nothing");
+    // readFormat is the pipeline's prepare, called as the output starts and when its format changes.
+    static const SGAudioProcessor processor = {readFormat, rendered};
+    if (!SGAudioPipelineRegister(SGAudioStageVisualizer, &processor)) {
+        SGLog(@"visualizer: the audio pipeline took no stage, the visualiser hears nothing");
         return;
     }
     dispatch_async(dispatch_get_main_queue(), ^{ readLatency(); });
