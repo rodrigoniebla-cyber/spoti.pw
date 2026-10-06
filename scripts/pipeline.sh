@@ -124,6 +124,8 @@ echo "==> loading the App Group shim in the widget and Siri extensions"
 OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 PATCHED=0
 for APPEX in $(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | sort -u); do
+  # Spotify's own extensions only: the mod's Live Activity widget has no App Groups of Spotify's to move.
+  case "$(basename "$APPEX")" in SpotifyGlass*) continue ;; esac
   PATCH="$(mktemp -d)"
   unzip -q "$OUT" "${APPEX}Info.plist" -d "$PATCH"
   POINT="$(plutil -extract NSExtension.NSExtensionPointIdentifier raw -o - "$PATCH/${APPEX}Info.plist" 2>/dev/null || true)"
@@ -137,8 +139,8 @@ for APPEX in $(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | 
   echo "    $(basename "$APPEX") ($POINT)"
   "$ROOT/scripts/insert-dylib.py" "$PATCH/$BIN" @rpath/SpotifyGlassAppGroups.dylib
   # Fakesigned again with its own entitlements, the way cyan -s left it, for TrollStore.
-  ldid -e "$PATCH/$BIN" > "$PATCH/ents.plist"
-  ldid -S"$PATCH/ents.plist" "$PATCH/$BIN"
+  ldid -e "$PATCH/$BIN" > "$PATCH/ents.plist" 2>/dev/null || true
+  if [ -s "$PATCH/ents.plist" ]; then ldid -S"$PATCH/ents.plist" "$PATCH/$BIN"; else ldid -S "$PATCH/$BIN"; fi
   (cd "$PATCH" && zip -q "$OUT_ABS" "$BIN")
   rm -rf "$PATCH"
   PATCHED=$((PATCHED + 1))
