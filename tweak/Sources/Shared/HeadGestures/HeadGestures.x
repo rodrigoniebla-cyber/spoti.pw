@@ -3,5 +3,6 @@
 #import "HeadGestures.h"
 
 %ctor {
+    if (SGOff("headgestures")) return;
     dispatch_async(dispatch_get_main_queue(), ^{ SGHeadGesturesApply(); });
 }

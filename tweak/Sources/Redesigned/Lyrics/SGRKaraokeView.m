@@ -179,7 +179,7 @@ static UIView *letterRow(NSString *text, UIFont *font, UIColor *color, CGRect fr
     _riseEnd = word.end;
     _rightToLeft = rightToLeft;
     NSUInteger letters = word.text.length;
-    BOOL wave = !rightToLeft && !SGRReduceMotion() && word.end - word.start >= kWaveMinMs && letters >= 2 && letters <= kWaveMostLetters
+    BOOL wave = !SGOff("glow") && !rightToLeft && !SGRReduceMotion() && word.end - word.start >= kWaveMinMs && letters >= 2 && letters <= kWaveMostLetters
         && !SGKaraokeUnspacedScript(word.text);
     if (wave) {
         NSMutableArray<UILabel *> *dim = [NSMutableArray array], *lit = [NSMutableArray array];
@@ -242,6 +242,7 @@ static UIView *letterRow(NSString *text, UIFont *font, UIColor *color, CGRect fr
 
 // The longer the word is held, the brighter it glows while it is sung, easing out after it.
 - (void)glowAt:(double)ms {
+    if (SGOff("glow")) return;
     double start = _word.start, end = _word.end, held = end - start;
     double strength = MAX(0, MIN(1, (held - kGlowFromMs) / (kGlowFullMs - kGlowFromMs)));
     double glow = 0;

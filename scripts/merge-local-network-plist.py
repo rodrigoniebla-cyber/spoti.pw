@@ -21,5 +21,11 @@ if not original.get("NSLocalNetworkUsageDescription"):
 if not original.get("NSMotionUsageDescription"):
     overlay["NSMotionUsageDescription"] = "Follow your head with AirPods for Spatial voice and AirPods gestures."
 
+# A build made with the plist part left out (SG_DISABLE, Core/SGPrefs.h) adds neither of the two keys below.
+import os
+if "plist" in os.environ.get("SG_DISABLE", "").split(","):
+    overlay.pop("MusicHapticsSupported", None)
+    overlay.pop("NSMotionUsageDescription", None)
+
 with open(sys.argv[3], "wb") as output:
     plistlib.dump(overlay, output)

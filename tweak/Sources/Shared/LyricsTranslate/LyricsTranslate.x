@@ -6,6 +6,6 @@
 void SGGeminiStart(void);
 
 %ctor {
-    if (!SGRedesignedUI()) return;
+    if (SGOff("gemini") || !SGRedesignedUI()) return;
     dispatch_async(dispatch_get_main_queue(), ^{ SGGeminiStart(); });
 }

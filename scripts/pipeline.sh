@@ -123,7 +123,9 @@ rm -f "$ROOT/out/.injection.plist"
 echo "==> loading the App Group shim in the widget and Siri extensions"
 OUT_ABS="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 PATCHED=0
-for APPEX in $(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | sort -u); do
+# SG_DISABLE=extpatch leaves them as cyan made them (Core/SGPrefs.h says what SG_DISABLE is).
+case ",${SG_DISABLE:-}," in *,extpatch,*) APPEXES="" ;; *) APPEXES="$(unzip -Z1 "$OUT" | grep -oE "^${APP_DIR}PlugIns/[^/]+\.appex/" | sort -u)" ;; esac
+for APPEX in $APPEXES; do
   # Spotify's own extensions only: the mod's Live Activity widget has no App Groups of Spotify's to move.
   case "$(basename "$APPEX")" in SpotifyGlass*) continue ;; esac
   PATCH="$(mktemp -d)"

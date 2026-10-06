@@ -136,6 +136,7 @@ static void settingsChanged(void) {
 }
 
 %ctor {
+    if (SGOff("visualizer")) return;
     static const SGAudioProcessor processor = {readFormat, rendered};
     if (!SGAudioPipelineRegister(SGAudioStageVisualizer, &processor)) return;
     dispatch_async(dispatch_get_main_queue(), ^{

@@ -13,6 +13,11 @@ on:
         required: false
         default: ""
         type: string
+      disable:
+        description: "Parts of the mod to leave out, comma separated (Core/SGPrefs.h): liveactivity, lockscreen, syshaptics, stats, gemini, visualizer, sing, headgestures, glow, plist, extpatch. For finding which part a problem comes from"
+        required: false
+        default: ""
+        type: string
       upload_method:
         description: "Where to put the result"
         default: artifacts
@@ -74,6 +79,8 @@ jobs:
           case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
 
       - run: make release
+        env:
+          SG_DISABLE: ${{ inputs.disable }}
 
       - uses: actions/upload-artifact@v5
         if: inputs.upload_method != 'filebin'

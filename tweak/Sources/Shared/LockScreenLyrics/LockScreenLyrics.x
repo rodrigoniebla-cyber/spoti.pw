@@ -266,7 +266,7 @@ static BOOL playingBy(NSDictionary *info) {
 %end
 
 %ctor {
-    if (!SGFlag(SGKeyLockScreenLyrics, NO)) return;
+    if (SGOff("lockscreen") || !SGFlag(SGKeyLockScreenLyrics, NO)) return;
     sg_lock = [NSObject new];
     sg_artworkLock = [NSObject new];
     sg_place = (SGLockScreenLyricsPlace)MAX(0, MIN(2, SGInt(SGKeyLockScreenLyricsPlace, SGLockScreenLyricsArtist)));

@@ -353,6 +353,7 @@ static void runAction(NSString *action) {
 }
 
 void SGSetLiveActivityEnabled(BOOL on) {
+    if (SGOff("liveactivity")) on = NO;
     if (@available(iOS 17.0, *)) {
         [sg_timer invalidate];
         sg_timer = nil;

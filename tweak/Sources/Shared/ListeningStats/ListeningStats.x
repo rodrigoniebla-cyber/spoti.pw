@@ -7,6 +7,7 @@
 void SGListeningStatsFlush(void);
 
 %ctor {
+    if (SGOff("stats")) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         SGListeningStatsApply();
         for (NSNotificationName name in @[UIApplicationDidEnterBackgroundNotification, UIApplicationWillTerminateNotification]) {

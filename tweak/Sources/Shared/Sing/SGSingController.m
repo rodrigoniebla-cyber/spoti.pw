@@ -435,6 +435,7 @@ static void workerStatus(void *context, int32_t status) {
 @end
 
 BOOL SGSingSupported(void) {
+    if (SGOff("sing")) return NO;
     if (@available(iOS 18.0, *)) return YES;
     return NO;
 }
