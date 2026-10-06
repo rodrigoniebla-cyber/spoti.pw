@@ -48,7 +48,7 @@ static float sum(int from, int to) {
 }
 
 static int barFor(double hz) {
-    double binHz = analyzer.sampleRate / SGSpectrumWindow;
+    double binHz = analyzer.sampleRate / analyzer.size;
     for (int b = 0; b < analyzer.count; b++) if (hz < analyzer.first[b + 1] * binHz) return b;
     return analyzer.count - 1;
 }

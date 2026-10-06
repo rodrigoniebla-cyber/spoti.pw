@@ -96,9 +96,22 @@ static void join(void) {
     });
 }
 
-void SGVisualizerSetListening(BOOL listening) {
+// A ring on screen in the app, or the lock screen's frames (LockScreenLyrics.x), either keeps it reading.
+static BOOL sg_ringShows, sg_lockScreen;
+static void listen(void) {
+    BOOL listening = sg_ringShows || sg_lockScreen;
     if (listening && !SGOff("visualizer")) join();
     atomic_store(&sg_listening, listening);
+}
+
+void SGVisualizerSetListening(BOOL listening) {
+    sg_ringShows = listening;
+    listen();
+}
+
+void SGVisualizerSetLockScreenListening(BOOL listening) {
+    sg_lockScreen = listening;
+    listen();
 }
 
 static double rate(void) {

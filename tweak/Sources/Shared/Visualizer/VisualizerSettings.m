@@ -45,3 +45,20 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     if (waitsOnKey) for (SGModRow *row in rows) SGWaitsOn(row, waitsOnKey, NO);
     return rows;
 }
+
+static NSArray<NSNumber *> *rates(void) { return @[@6, @10, @15]; }
+
+NSInteger SGLockScreenVisualizerFramesPerSecond(void) {
+    NSArray<NSNumber *> *list = rates();
+    NSInteger index = SGInt(SGKeyLockScreenVisualizerRate, 1);
+    return list[(NSUInteger)MAX(0, MIN((NSInteger)list.count - 1, index))].integerValue;
+}
+
+NSArray<SGModRow *> *SGLockScreenVisualizerRows(void) {
+    SGModRow *on = SGOptionRow(@"Lock screen visualizer", @"The cover in a ring of bars, as the artwork", SGKeyLockScreenVisualizer);
+    SGModRow *rate = SGChoiceRow(@"Lock screen frames", nil, SGKeyLockScreenVisualizerRate, @[@"6 a second", @"10 a second", @"15 a second"], 1);
+    rate.choiceNotes = @[@"Lightest on the battery", @"Smooth enough to follow the beat", @"Smoothest, and the most battery"];
+    rate.choiceFooter = @"The lock screen draws a new picture each time, so it never moves as smoothly as the ring in the player.";
+    SGWaitsOn(rate, SGKeyLockScreenVisualizer, NO);
+    return @[on, rate];
+}

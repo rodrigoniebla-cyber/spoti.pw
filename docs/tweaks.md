@@ -115,7 +115,14 @@ Shared:
                   Spotify's id; its lyrics are what was typed in for it (Documents/spoti.pw/Local lyrics/<id>.lrc,
                   LRC or plain lines, from the Lyrics page's "Lyrics of this local file" sheet while one plays),
                   else LRCLIB's by the title, artist and length its URI carries
-    LockScreenLyrics/ the line being sung in the system's now playing
+    LockScreenLyrics/ the line being sung in the system's now playing, checked ten times a second; and the lock
+                  screen visualizer (Lyrics > Lock screen visualizer, read at launch): while Spotify is not on
+                  screen and the sound moves, a timer at 6, 10 or 15 a second reads the visualizer's bars, draws a
+                  frame off the main thread (Visualizer/SGVisualizerFrame.m: the cover as a circle in the ring over
+                  it blurred, the line under it when lock screen lyrics show the line as the artwork) and sends the
+                  info again with that frame as the artwork; the cover is fetched from Spotify's artwork on that
+                  queue, never the main thread. An animated artwork (LockScreenArtwork/) is drawn over it, so the
+                  Canvas is best off with it
     LockScreenArtwork/ the track's Canvas or its album's Apple Music cover as the lock screen's animated
                   artwork, from iOS 26 (Apple takes an MPMediaItemAnimatedArtwork under one of
                   MPNowPlayingInfoCenter's animated artwork keys, and the mod puts one there through a second
@@ -170,7 +177,8 @@ Shared:
                   stage (SGAudioStageVisualizer, VisualizerTap.x, which joins the pipeline only when a ring first
                   shows, never at launch: registered there it froze Spotify as a song started) into a single writer
                   ring, only while a ring is on screen, and rings drawn in the same frame share one analysis; once a frame the newest 2048 samples go through a Hann window and an FFT into log spaced
-                  bands against the loudest lately (SGSpectrum.m, plain C, harness/visualizer/), following
+                  bands against the loudest lately (SGSpectrum.m, plain C, harness/visualizer/; the newest 1024
+                  samples, 2048 for Bass, with a quick rise and fall, so the bars are on the beat), following
                   everything, the beat or the bass at a strength, as Music Haptics does or with Music Haptics' own
                   settings; SGVisualizerView draws them as bars, a wave or dots on a display link run the lyrics'
                   way (60 to 120 Hz, down during player transitions and off screen). The redesigned player rings

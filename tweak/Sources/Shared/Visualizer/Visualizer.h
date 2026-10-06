@@ -39,8 +39,23 @@ extern NSNotificationName const SGVisualizerSettingsDidChangeNotification;
 
 NSInteger SGVisualizerBarCount(void);
 
-// VisualizerTap.x: the tap reads the sound only while at least one ring is on screen.
+// VisualizerTap.x: the tap reads the sound only while at least one ring is on screen, or the lock screen
+// draws frames. Main thread.
 void SGVisualizerSetListening(BOOL listening);
+void SGVisualizerSetLockScreenListening(BOOL listening);
+
+// The visualizer on the lock screen (Shared/LockScreenLyrics/LockScreenLyrics.x): the now playing artwork
+// becomes the cover in a ring of bars over the cover blurred, drawn again several times a second while
+// Spotify is not on screen and the sound moves, with the line being sung under it when lock screen lyrics
+// show the line as the artwork. Read at launch, like the lock screen lyrics' switch.
+#define SGKeyLockScreenVisualizer @"spotifyglass.lockScreenVisualizer"            // off until switched on
+#define SGKeyLockScreenVisualizerRate @"spotifyglass.lockScreenVisualizer.rate"   // an index into the rates below
+NSInteger SGLockScreenVisualizerFramesPerSecond(void);   // 6, 10 (unset) or 15
+
+// SGVisualizerFrame.m: one picture of the ring, `side` points square at scale 1, in the ring's own style,
+// colour and mirror. Any thread; `cover` and `backdrop` may be nil, and `line`/`next` are drawn under it.
+UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, const float *bars, NSInteger bands,
+                               UIColor *accent, NSString *line, NSString *next);
 // The newest bars, `count` of them, for a frame `elapsed` seconds after the last; NO when there is no sound
 // to read yet (the bars then fall, which this does too).
 BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed);
@@ -49,3 +64,5 @@ BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed);
 // VisualizerSettings.m: the rows that set it up, for the page of whoever shows a ring, greyed out while the
 // switch under `waitsOnKey` (off until switched on) is off; nil for none.
 NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey);
+// The lock screen's switch and how often it draws, under either look.
+NSArray<SGModRow *> *SGLockScreenVisualizerRows(void);

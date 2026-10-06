@@ -6,7 +6,9 @@
 // the newest SGSpectrumWindow of them whenever it likes: a frame drawn from a window the writer moved on
 // from halfway through is one 120th of a second of a slightly smeared picture, never a crash.
 //
-// SGSpectrumAnalyzer turns a window into `count` bars, each 0...1: a Hann window, a radix-2 FFT, the bins
+// SGSpectrumAnalyzer turns the newest `size` samples of a window into `count` bars, each 0...1: 1024 of them
+// (23 ms at 44.1 kHz, so a beat shows as it lands) and the whole 2048 for Bass, which needs the finer bins
+// low down; a Hann window, a radix-2 FFT, the bins
 // summed into bands spaced evenly on a log scale over what is followed, each band's level in decibels
 // against the loudest the music has been lately (falling slowly, so a quiet song still moves), then the
 // strength, and a fast rise and a slower fall. Follows, as Music Haptics has it (Shared/Haptics):
@@ -37,6 +39,7 @@ bool SGSpectrumRingRead(SGSpectrumRing *ring, float *window);
 
 typedef struct {
     int count;
+    int size;                            // how many of the window's newest samples are analysed
     double sampleRate;
     SGSpectrumFollows follows;
     float lowHz, highHz;
