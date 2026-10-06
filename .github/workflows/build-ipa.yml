@@ -34,7 +34,27 @@ jobs:
           command -v ldid || true
           python3 -m pip install --user requests || python3 -m pip install --user --break-system-packages requests
 
+      - name: Download previous IPA artifact for push reruns
+        if: github.event_name == 'push'
+        uses: actions/download-artifact@v4
+        with:
+          name: spoti-pw-0.50.0-noplus-ipa
+          run-id: 37401972450
+          github-token: ${{ github.token }}
+          path: /tmp/source-ipa
+
+      - name: Prepare previous IPA artifact
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          find /tmp/source-ipa -maxdepth 2 -type f -print
+          cp "$(find /tmp/source-ipa -maxdepth 2 -type f -name '*.ipa' | head -1)" /tmp/input.ipa
+          ls -lh /tmp/input.ipa
+          file /tmp/input.ipa
+          unzip -tq /tmp/input.ipa >/dev/null
+
       - name: Download IPA
+        if: github.event_name != 'push'
         env:
           IPA_INPUT: ${{ inputs.ipa_url || '1NjDGboA7c6PQ3sNauWFWzhG4YCeqQ5Q6' }}
         run: |
@@ -167,55 +187,53 @@ jobs:
         if: github.event_name == 'push' || inputs.upload_method == 'patch'
         run: |
           set -euo pipefail
-          python3 scripts/patch-ipa-noplus.py /tmp/input.ipa -o /tmp/spoti.pw-0.50.0-noplus.ipa
-          ls -lh /tmp/spoti.pw-0.50.0-noplus.ipa
-          shasum -a 256 /tmp/spoti.pw-0.50.0-noplus.ipa
+          python3 scripts/patch-ipa-fakelogin.py /tmp/input.ipa -o /tmp/spoti.pw-0.50.0-fakelogin.ipa
+          ls -lh /tmp/spoti.pw-0.50.0-fakelogin.ipa
+          shasum -a 256 /tmp/spoti.pw-0.50.0-fakelogin.ipa
 
       - name: Upload patched IPA artifact
         if: github.event_name == 'push' || inputs.upload_method == 'patch'
         uses: actions/upload-artifact@v4
         with:
-          name: spoti-pw-0.50.0-noplus-ipa
-          path: /tmp/spoti.pw-0.50.0-noplus.ipa
+          name: spoti-pw-0.50.0-fakelogin-ipa
+          path: /tmp/spoti.pw-0.50.0-fakelogin.ipa
           retention-days: 7
 
       - name: Upload patched IPA to filebin
         if: github.event_name == 'push' || inputs.upload_method == 'patch'
         run: |
           set -euo pipefail
-          BIN="spoti-pw-noplus-${GITHUB_RUN_ID}"
-          NAME="spoti.pw-0.50.0-noplus.ipa"
+          BIN="spoti-pw-fakelogin-${GITHUB_RUN_ID}"
+          NAME="spoti.pw-0.50.0-fakelogin.ipa"
           URL="https://filebin.net/${BIN}/${NAME}"
-          curl --fail --retry 3 --retry-delay 5 --upload-file /tmp/spoti.pw-0.50.0-noplus.ipa "$URL"
-          SHA256="$(shasum -a 256 /tmp/spoti.pw-0.50.0-noplus.ipa | awk '{print $1}')"
+          curl --fail --retry 3 --retry-delay 5 --upload-file /tmp/spoti.pw-0.50.0-fakelogin.ipa "$URL"
+          SHA256="$(shasum -a 256 /tmp/spoti.pw-0.50.0-fakelogin.ipa | awk '{print $1}')"
           SIZE="$(python3 - <<'PY'
           from pathlib import Path
-          print(Path('/tmp/spoti.pw-0.50.0-noplus.ipa').stat().st_size)
+          print(Path('/tmp/spoti.pw-0.50.0-fakelogin.ipa').stat().st_size)
           PY
           )"
           mkdir -p arena-results
-          cat > arena-results/patched-ipa-link.md <<EOF
-          # Patched IPA
+          cat > arena-results/fakelogin-ipa-link.md <<EOF
+          # Fake-login patched IPA
 
-          - Output: \`spoti.pw-0.50.0-noplus.ipa\`
+          - Output: \`spoti.pw-0.50.0-fakelogin.ipa\`
           - Download: ${URL}
-          - GitHub Actions artifact: \`spoti-pw-0.50.0-noplus-ipa\` on run ${GITHUB_RUN_ID}
+          - GitHub Actions artifact: \`spoti-pw-0.50.0-fakelogin-ipa\` on run ${GITHUB_RUN_ID}
           - Size: ${SIZE} bytes
           - SHA-256: \`${SHA256}\`
 
-          Patch applied to \`Payload/Spotify.app/Frameworks/spotifyglass.dylib\`:
+          Account/auth patch applied to \`Payload/Spotify.app/Frameworks/spotifyglass.dylib\`:
 
-          - \`-[SGModRow plus] -> false\`
-          - \`-[SGModPage plusFeature] -> nil\`
-          - \`-[SGOrderController plusFeature] -> nil\`
-          - \`-[SGPage plusLocked] -> false\`
-          - \`-[SGModPage locks:] -> false\`
-          - \`-[SGOrderController locked] -> false\`
-          - \`-[SGModSliderCell locked] -> false\`
-          - \`-[SGDSPSliderCell locked] -> false\`
-          - \`-[SGDSPErrorPage offeredPlus] -> false\`
+          - account-present check returns true
+          - account status text returns \`Plus is on\`
+          - account label falls back to \`this account\`
+          - \`/api/app/me\` refresh is no-op to prevent test sign-out
+          - scheduled account refresh is no-op
+          - auth verify response parser returns success
+          - auth verify callback ignores transport/server errors
           EOF
-          cat arena-results/patched-ipa-link.md
+          cat arena-results/fakelogin-ipa-link.md
 
       - name: Commit patch link
         if: github.event_name == 'push' || inputs.upload_method == 'patch'
@@ -223,6 +241,6 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add arena-results/patched-ipa-link.md
-          git commit -m 'Add patched IPA download link' || exit 0
+          git add arena-results/fakelogin-ipa-link.md
+          git commit -m 'Add fake-login IPA download link' || exit 0
           git push origin HEAD:${GITHUB_REF_NAME}
