@@ -165,6 +165,12 @@ static UIImage *lyricsImage(UIImage *backdrop, NSString *line, NSString *next) {
 static MPMediaItemArtwork *lyricsArtwork(MPMediaItemArtwork *cover, NSString *line, NSString *next) {
     CGSize size = CGSizeMake(kArtworkSide, kArtworkSide);
     return [[MPMediaItemArtwork alloc] initWithBoundsSize:size requestHandler:^UIImage *(CGSize wanted) {
+        // Spotify's own handler can wait on the main thread, so it is never asked from there.
+        if (NSThread.isMainThread) {
+            @synchronized (sg_artworkLock) {
+                return lyricsImage(sg_backdropOf == cover ? sg_backdrop : nil, line, next);
+            }
+        }
         return lyricsImage(backdropFor(cover), line, next);
     }];
 }

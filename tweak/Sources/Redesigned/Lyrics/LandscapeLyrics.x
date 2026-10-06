@@ -157,7 +157,8 @@ SGModRow *SGRLandscapeLyricsRow(void) {
 }
 
 %ctor {
-    if (!SGRedesignedUI() || !SGEnabled(SGRKeyLandscapeLyrics)) return;
+    // The screen turns the lyrics by 90 degrees on its own, which only an iPhone held on its side wants.
+    if (!SGRedesignedUI() || !SGEnabled(SGRKeyLandscapeLyrics) || UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         [UIDevice.currentDevice beginGeneratingDeviceOrientationNotifications];
         [NSNotificationCenter.defaultCenter addObserverForName:UIDeviceOrientationDidChangeNotification object:nil queue:NSOperationQueue.mainQueue

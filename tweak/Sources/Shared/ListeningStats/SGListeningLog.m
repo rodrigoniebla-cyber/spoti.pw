@@ -75,10 +75,12 @@ static const NSTimeInterval kFlushInterval = 30;
 - (void)save {
     if (!_dirty) return;
     _dirty = NO;
-    NSDictionary *saved = @{@"v": @1, @"events": [_events copy], @"tracks": [_tracks copy]};
-    NSData *data = [NSJSONSerialization dataWithJSONObject:saved options:0 error:NULL];
+    // A snapshot, since the events of the listen going on are changed in place; the JSON is made off the main thread.
+    NSDictionary *saved = @{@"v": @1, @"events": [[NSArray alloc] initWithArray:_events copyItems:YES], @"tracks": [_tracks copy]};
     NSURL *url = SGListeningLog.fileURL;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSData *data = [NSJSONSerialization dataWithJSONObject:saved options:0 error:NULL];
+        if (!data) return;
         [NSFileManager.defaultManager createDirectoryAtURL:url.URLByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:NULL];
         if (![data writeToURL:url options:NSDataWritingAtomic error:NULL]) SGLog(@"listening stats: could not write the log");
     });

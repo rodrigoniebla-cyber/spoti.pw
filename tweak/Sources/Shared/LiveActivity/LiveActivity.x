@@ -109,7 +109,8 @@ static NSInteger repeatModeOf(SPTPlayerOptions *options) {
 
 // The cover's colour, the average of the artwork Spotify hands the system's now playing, worked out once per
 // cover and brightened a little so a dark cover still tints the card. -1 until there is one.
-static __weak MPMediaItemArtwork *sg_tintOf;
+static NSString *sg_tintTrack;
+static BOOL sg_tinting;
 static NSInteger sg_tint = -1;
 
 // Spotify's artwork handler is not ours to call on the main thread: it can wait on that thread itself, which
@@ -135,16 +136,23 @@ static NSInteger tintOfImage(UIImage *image) {
 }
 
 static NSInteger coverTint(void) {
+    // Once per track and one at a time: Spotify may hand over a new artwork object with every update.
+    NSString *track = SGKaraokePlayingTrack();
+    if (!track || sg_tinting || [track isEqualToString:sg_tintTrack]) return sg_tint;
     id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
-    if (![artwork isKindOfClass:MPMediaItemArtwork.class] || artwork == sg_tintOf) return sg_tint;
-    sg_tintOf = artwork;
+    if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return sg_tint;
+    sg_tintTrack = [track copy];
+    sg_tinting = YES;
     static dispatch_queue_t queue;
     static dispatch_once_t once;
     dispatch_once(&once, ^{ queue = dispatch_queue_create("spotifyglass.cover-tint", DISPATCH_QUEUE_SERIAL); });
     MPMediaItemArtwork *cover = artwork;
     dispatch_async(queue, ^{
         NSInteger tint = tintOfImage([cover imageWithSize:CGSizeMake(32, 32)]);
-        if (tint >= 0) dispatch_async(dispatch_get_main_queue(), ^{ if (cover == sg_tintOf) sg_tint = tint; });
+        dispatch_async(dispatch_get_main_queue(), ^{
+            sg_tinting = NO;
+            if (tint >= 0 && [track isEqualToString:sg_tintTrack]) sg_tint = tint;
+        });
     });
     return sg_tint;
 }
@@ -354,6 +362,12 @@ void SGSetLiveActivityEnabled(BOOL on) {
         if (!on) {
             [SGLiveActivityBridge end];
             SGLog(@"live activity: off");
+            return;
+        }
+        // iPadOS has no Live Activities: the timer would only ask ActivityKit, four times a second, for
+        // nothing that can be shown.
+        if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
+            SGLog(@"live activity: not on this device");
             return;
         }
         static dispatch_once_t observing;

@@ -144,9 +144,9 @@ NSString *SGKaraokeSpotifyAuthorization(void) {
 }
 
 // `retry`: the sources' walk failed on the way, so an answer with no lines is not final either.
-static void requestFromSpotify(NSString *trackID, BOOL retry) {
+static BOOL requestFromSpotify(NSString *trackID, BOOL retry) {
     NSDictionary<NSString *, NSString *> *headers = sg_spclientHeaders;
-    if (!headers || SGKaraokeIsLocalTrack(trackID)) return;
+    if (!headers || SGKaraokeIsLocalTrack(trackID)) return NO;
     [sg_requested addObject:trackID];
     [sg_asking addObject:trackID];
     NSString *address = [NSString stringWithFormat:@"https://spclient.wg.spotify.com/color-lyrics/v2/track/%@?format=json&vocalRemoval=false&market=from_token", trackID];
@@ -181,6 +181,7 @@ static void requestFromSpotify(NSString *trackID, BOOL retry) {
             SGLyricsSetCredit(trackID, SGLyricsCreditNamed(@"Spotify"));
         });
     }] resume];
+    return YES;
 }
 
 void SGKaraokeAskSpotifyForTiming(NSString *trackID) {
@@ -211,7 +212,12 @@ void SGKaraokeRequestLyrics(NSString *trackID) {
             if (SGKaraokeLinesTiming(lyrics.karaokeLines) != SGKaraokeTimingNone) return;
         }
         [sg_requested removeObject:trackID];
-        requestFromSpotify(trackID, !lyrics && SGLyricsMayHave(trackID));
+        // With no Spotify headers captured yet there is nobody to ask, and the readers ticking four times a
+        // second would walk every source again each time: the track waits out a pause instead.
+        if (!requestFromSpotify(trackID, !lyrics && SGLyricsMayHave(trackID)) && !lyrics.karaokeLines) {
+            [sg_requested addObject:trackID];
+            askAgainLater(trackID);
+        }
     });
 }
 

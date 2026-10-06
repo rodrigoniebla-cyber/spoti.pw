@@ -121,7 +121,8 @@ static SGSystemHapticsWatcher *sg_watcher;
 
 %ctor {
     if (@available(iOS 18.0, *)) {
-        if (!SGEnabled(SGKeySystemMusicHaptics)) return;
+        // An iPad has no Taptic Engine for iOS to play a haptic track on.
+        if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone || !SGEnabled(SGKeySystemMusicHaptics)) return;
         sg_isrcs = [NSMutableDictionary dictionary];
         sg_asking = [NSMutableSet set];
         %init;
