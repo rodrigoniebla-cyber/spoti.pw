@@ -61,7 +61,6 @@ plutil -convert binary1 "$APPEX/Info.plist"
 # module the tweak compiles them in (Theos names it after the tweak instance). So do the speed and pitch
 # intents, entities and App Shortcuts, which only the app has.
 metadata spotifyglass 16.0 "$OUT/app" "$SHARED" "$SPEED_INTENTS"
-echo "    the app's metadata: $(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print({k: (len(v) if hasattr(v, '__len__') else v) for k, v in d.items()})" "$OUT/app/Metadata.appintents/extract.actionsdata")"
 
 codesign -f -s - "$APPEX" >/dev/null 2>&1
 rm -rf "$WORK"
