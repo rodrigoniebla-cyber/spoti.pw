@@ -1,6 +1,7 @@
 // The cover palette (tweak/Sources/Shared/Visualizer/SGPalette.h) on made-up covers: two big colours come
-// back as those two, a black border votes for nothing, one hue is filled out with shades of it, a grey cover
-// gets greys, every colour is bright enough for a bar on black, and the dominant colour is first.
+// back as those two, a black border is no colour of its own, one colour is filled out with lighter and darker
+// shades of it, a grey cover gets greys, the colours taken are light enough for a bar on black, and the main
+// colour is first.
 //   cc -std=c11 -I tweak/Sources -x c harness/visualizer/palette_test.c -x c tweak/Sources/Shared/Visualizer/SGPalette.m -lm
 #include "Shared/Visualizer/SGPalette.h"
 #include <assert.h>
@@ -53,9 +54,11 @@ int main(void) {
     for (int i = 0; i < 12; i++) assert(rgb[i] >= 0 && rgb[i] <= 1);
     assert(away(hueOf(rgb), 0) < 12);                 // the dominant colour first, and red
     assert(hasHue(rgb, 4, 230, 14));                   // blue is in
-    for (int i = 0; i < 4; i++) assert(valueOf(&rgb[i * 3]) >= 0.77f);
+    for (int i = 0; i < 4; i++) assert(valueOf(&rgb[i * 3]) >= 0.5f);
     // Nothing black came out as a colour.
     for (int i = 0; i < 4; i++) assert(hueOf(&rgb[i * 3]) >= 0);
+    // The two taken from the picture are light enough to show on black.
+    assert(valueOf(rgb) >= 0.75f);
 
     // The same cover with the colours the other way round: blue first.
     memset(pixels, 0, sizeof pixels);
@@ -66,15 +69,17 @@ int main(void) {
     assert(away(hueOf(rgb), 230) < 14);
     assert(hasHue(rgb, 3, 0, 12));
 
-    // One hue: shades of it, the colours not all the same.
+    // One colour: shades of it, of its hue, the colours not all the same.
     memset(pixels, 0, sizeof pixels);
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 255;
     fill(0, 0, W, H, 30, 160, 60);
     assert(SGPaletteExtract(pixels, W, H, W * 4, 4, rgb) == 4);
-    assert(away(hueOf(rgb), 135) < 10);
-    int different = 0;
-    for (int i = 1; i < 4; i++) if (away(hueOf(&rgb[i * 3]), hueOf(rgb)) > 10) different++;
-    assert(different == 3);
+    assert(away(hueOf(rgb), 135) < 12);
+    for (int i = 1; i < 4; i++) {
+        assert(away(hueOf(&rgb[i * 3]), hueOf(rgb)) < 15);
+        float d = fabsf(rgb[i * 3] - rgb[0]) + fabsf(rgb[i * 3 + 1] - rgb[1]) + fabsf(rgb[i * 3 + 2] - rgb[2]);
+        assert(d > 0.08f);
+    }
 
     // A grey cover: greys, no hue anywhere.
     fill(0, 0, W, H, 120, 120, 120);

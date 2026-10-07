@@ -45,6 +45,8 @@
 #define SGRKeyPlayerVisualizer @"spotifyglass.redesign.player.visualizer"        // off until switched on
 #define SGRKeyPlayerVisualizerSpin @"spotifyglass.redesign.player.visualizer.spin"   // on until switched off
 NSArray<SGModSection *> *SGRPlayerVisualizerSections(void);
+// The Visualizer page, with those sections first (App/Pages.m links it from the Player page).
+UIViewController *SGRPlayerVisualizerPage(void);
 
 #pragma mark - the background (PlayerBackgroundSettings.m)
 

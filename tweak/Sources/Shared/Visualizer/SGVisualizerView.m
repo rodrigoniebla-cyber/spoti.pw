@@ -1,12 +1,15 @@
 // SGVisualizerView.h says what it is. One shape layer holds every bar, its path made again each frame from
-// the bars SGVisualizerReadBars hands back, under a conic gradient for the Spectrum colour, or for the Cover
-// gradient: the playing cover's main colours (SGCoverPalette.h) round the ring, mirrored when the ring is. The display link runs
+// the bars SGVisualizerReadBars hands back. A gradient colour (Spectrum, or the Cover gradient, the playing
+// cover's main colours, SGCoverPalette.h) is a gradient layer the shape masks: radial along every bar, from
+// the darkest colour inside to the lightest at the tip, or conic round the ring, once or there and back several
+// times. Alternating gives each colour a shape layer of its own, every bar going to the next colour's. The display link runs
 // the way the lyrics' does (Redesigned/Lyrics/SGRKaraokeView.m): it asks for 60 to 120 frames a second, is
 // put down while the player opens or closes (Shared/Player/PlayerEvents.h) and whenever the view is not in a
 // window or the app is not in front, so a locked phone is not woken to draw what nobody sees.
 #import "Core/SGCore.h"
 #import "Shared/Player/PlayerEvents.h"
 #import "SGCoverPalette.h"
+#import "SGPalette.h"
 #import "SGSpectrum.h"
 #import "Visualizer.h"
 #import "SGVisualizerView.h"
@@ -38,6 +41,10 @@ static void showing(NSInteger change) {
     // The bars' directions, made again when their number changes.
     float _cos[SGSpectrumMaxBands], _sin[SGSpectrumMaxBands];
     NSInteger _angles;
+    SGVisualizerGradient _gradient;
+    // Alternating's layers, one a colour; the radial gradient's span, inside to tip, as last laid.
+    NSArray<CAShapeLayer *> *_alternates;
+    CGFloat _radialFrom, _radialTo;
 }
 
 // Shown as far as its ancestors go: none hidden or faded out (a queue cell's ring, a closed player's).
@@ -84,6 +91,8 @@ static BOOL onScreen(UIView *view) {
     _heightFactor = SGVisualizerHeightFactor();
     _peaks = SGFlag(SGKeyVisualizerPeaks, NO);
     _rotation = SGVisualizerRotationPeriod();
+    _gradient = (SGVisualizerGradient)SGInt(SGKeyVisualizerGradient, SGVisualizerGradientAlong);
+    _radialFrom = _radialTo = 0;
     memset(_bars, 0, sizeof _bars);
     memset(_peak, 0, sizeof _peak);
     [self applyColor:NO];
@@ -123,50 +132,96 @@ static BOOL onScreen(UIView *view) {
 
 - (void)applyColor:(BOOL)animated {
     UIColor *color = _color == SGVisualizerColorWhite ? UIColor.whiteColor : (_accent ?: UIColor.whiteColor);
-    BOOL cover = _color == SGVisualizerColorCover;
-    BOOL spectrum = _color == SGVisualizerColorSpectrum || cover;
+    NSArray<UIColor *> *colours = SGVisualizerGradientColours(_color, color);
+    BOOL alternating = colours.count > 1 && _gradient == SGVisualizerGradientAlternating;
     [CATransaction begin];
     if (animated) [CATransaction setAnimationDuration:0.8];
     else [CATransaction setDisableActions:YES];
-    if (cover) {
-        // Until the cover's colours are read, the accent all the way round.
-        NSArray<UIColor *> *palette = SGCoverPaletteForPlayingTrack() ?: @[color];
+    if (alternating) {
+        [self useLayers:2];
+        if (_alternates.count != colours.count) {
+            for (CAShapeLayer *layer in _alternates) [layer removeFromSuperlayer];
+            NSMutableArray<CAShapeLayer *> *layers = [NSMutableArray array];
+            for (NSUInteger i = 0; i < colours.count; i++) {
+                CAShapeLayer *layer = [CAShapeLayer layer];
+                layer.lineCap = kCALineCapRound;
+                layer.lineJoin = kCALineJoinRound;
+                layer.frame = self.bounds;
+                [self.layer addSublayer:layer];
+                [layers addObject:layer];
+            }
+            _alternates = layers;
+        }
+        [colours enumerateObjectsUsingBlock:^(UIColor *colour, NSUInteger i, BOOL *stop) {
+            CAShapeLayer *layer = self->_alternates[i];
+            BOOL dots = self->_style == SGVisualizerStyleDots;
+            layer.strokeColor = dots ? nil : colour.CGColor;
+            layer.fillColor = dots ? colour.CGColor : nil;
+        }];
+    } else if (colours) {
+        [self useLayers:1];
+        BOOL along = _gradient == SGVisualizerGradientAlong || _gradient == SGVisualizerGradientAlternating;
+        _spectrum.type = along ? kCAGradientLayerRadial : kCAGradientLayerConic;
+        _spectrum.startPoint = CGPointMake(0.5, 0.5);
+        _spectrum.endPoint = along ? CGPointMake(1, 1) : CGPointMake(0.5, 0);
         NSMutableArray *stops = [NSMutableArray array];
-        for (UIColor *stop in SGCoverGradientStops(palette, _mirror)) [stops addObject:(id)stop.CGColor];
-        if (stops.count == 1) [stops addObject:stops[0]];
+        for (UIColor *stop in SGVisualizerGradientStops(colours, along ? SGVisualizerGradientAlong : _gradient, _mirror,
+                                                        _color == SGVisualizerColorSpectrum)) {
+            [stops addObject:(id)stop.CGColor];
+        }
         _spectrum.colors = stops;
-    } else if (spectrum) {
-        _spectrum.colors = [SGVisualizerView hues];
-    }
-    if (spectrum) {
+        if (!along) _spectrum.locations = nil;
+        else [self placeRadialFrom:_radialFrom to:_radialTo force:YES];
         _shape.strokeColor = UIColor.whiteColor.CGColor;
         _shape.fillColor = _style == SGVisualizerStyleDots ? UIColor.whiteColor.CGColor : nil;
-        if (_spectrum.superlayer != self.layer) {
-            [_shape removeFromSuperlayer];
-            [self.layer addSublayer:_spectrum];
-            _spectrum.mask = _shape;
-        }
     } else {
-        if (_spectrum.superlayer) {
-            _spectrum.mask = nil;
-            [_spectrum removeFromSuperlayer];
-            [self.layer addSublayer:_shape];
-        }
+        [self useLayers:0];
         _shape.strokeColor = color.CGColor;
         _shape.fillColor = _style == SGVisualizerStyleDots ? color.CGColor : nil;
     }
     [CATransaction commit];
 }
 
-+ (NSArray *)hues {
-    static NSArray *hues;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        NSMutableArray *list = [NSMutableArray array];
-        for (int i = 0; i <= 12; i++) [list addObject:(id)[UIColor colorWithHue:i / 12.0 saturation:0.75 brightness:1 alpha:1].CGColor];
-        hues = list;
-    });
-    return hues;
+// Which layers draw: 0 the shape in one colour, 1 the gradient through the shape, 2 Alternating's own.
+- (void)useLayers:(int)which {
+    if (which != 2 && _alternates) {
+        for (CAShapeLayer *layer in _alternates) [layer removeFromSuperlayer];
+        _alternates = nil;
+    }
+    if (which == 1) {
+        if (_spectrum.superlayer != self.layer) {
+            [_shape removeFromSuperlayer];
+            [self.layer addSublayer:_spectrum];
+            _spectrum.mask = _shape;
+        }
+        return;
+    }
+    if (_spectrum.superlayer) {
+        _spectrum.mask = nil;
+        [_spectrum removeFromSuperlayer];
+    }
+    if (which == 0 && _shape.superlayer != self.layer) [self.layer addSublayer:_shape];
+    if (which == 2) {
+        [_shape removeFromSuperlayer];
+        _shape.path = nil;
+    }
+}
+
+// The radial gradient spread over the bars' length, inside to tip, as a share of the layer's half side; laid
+// again only when that moves by more than a point.
+- (void)placeRadialFrom:(CGFloat)from to:(CGFloat)to force:(BOOL)force {
+    if (!force && fabs(from - _radialFrom) < 1 && fabs(to - _radialTo) < 1) return;
+    _radialFrom = from;
+    _radialTo = to;
+    CGFloat half = MIN(self.bounds.size.width, self.bounds.size.height) / 2;
+    NSUInteger count = _spectrum.colors.count;
+    if (half <= 0 || to <= from || count < 2 || _spectrum.type != kCAGradientLayerRadial) return;
+    NSMutableArray<NSNumber *> *locations = [NSMutableArray arrayWithCapacity:count];
+    for (NSUInteger i = 0; i < count; i++) [locations addObject:@((from + (to - from) * i / (count - 1)) / half)];
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    _spectrum.locations = locations;
+    [CATransaction commit];
 }
 
 - (void)layoutSubviews {
@@ -175,6 +230,7 @@ static BOOL onScreen(UIView *view) {
     [CATransaction setDisableActions:YES];
     _shape.frame = self.bounds;
     _spectrum.frame = self.bounds;
+    for (CAShapeLayer *layer in _alternates) layer.frame = self.bounds;
     [CATransaction commit];
 }
 
@@ -216,8 +272,18 @@ static BOOL onScreen(UIView *view) {
     // or faded (asked twice a second, a walk up the views being too dear for every frame): nothing to draw.
     if (_frames++ % 30 == 0) {
         _covered = !onScreen(self);
-        // A new track's cover is noticed here: the read is kicked off and the notification brings it in.
-        if (_color == SGVisualizerColorCover) SGCoverPaletteForPlayingTrack();
+        // A new track's cover is noticed here: the read is kicked off and the notification brings it in. The
+        // picture on screen is read when there is one, the now playing artwork otherwise.
+        if (_color == SGVisualizerColorCover) {
+            __block UIImageView *largest = nil;
+            UIView *cover = self.coverView;
+            if (cover) SGForEachView(cover, ^(UIView *view) {
+                if ([view isKindOfClass:UIImageView.class] && ((UIImageView *)view).image
+                    && view.bounds.size.width > largest.bounds.size.width) largest = (UIImageView *)view;
+            });
+            if (largest.image && largest.bounds.size.width >= 80) SGCoverPaletteOfferImage(largest.image);
+            else SGCoverPaletteForPlayingTrack();
+        }
     }
     if (self.alpha < 0.01 || _covered) {
         _last = 0;
@@ -262,8 +328,13 @@ static BOOL onScreen(UIView *view) {
         }
         _angles = count;
     }
-    UIBezierPath *path = [UIBezierPath bezierPath];
+    // Alternating draws into a path a colour, every bar into the next one's; a wave is one line, so it stays one.
+    NSUInteger paths = _alternates.count && _style != SGVisualizerStyleWave ? _alternates.count : 1;
+    UIBezierPath *all[SGPaletteMaxColors + 1];
+    for (NSUInteger p = 0; p < paths; p++) all[p] = [UIBezierPath bezierPath];
+    if (_spectrum.superlayer && _spectrum.type == kCAGradientLayerRadial) [self placeRadialFrom:inner to:inner + reach force:NO];
     for (NSInteger i = 0; i < count; i++) {
+        UIBezierPath *path = all[(NSUInteger)i % paths];
         // Mirrored, the lowest band is at the top and the highest meets itself at the bottom.
         NSInteger band = _mirror ? (i < bands ? i : count - 1 - i) : i;
         CGFloat value = _bars[band];
@@ -293,11 +364,19 @@ static BOOL onScreen(UIView *view) {
             }
         }
     }
-    if (_style == SGVisualizerStyleWave) [path closePath];
+    if (_style == SGVisualizerStyleWave) [all[0] closePath];
+    CGFloat lineWidth = _style == SGVisualizerStyleWave ? MAX(1.5, 2.5 * _widthFactor) : _style == SGVisualizerStyleDots ? 0 : width;
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    _shape.lineWidth = _style == SGVisualizerStyleWave ? MAX(1.5, 2.5 * _widthFactor) : _style == SGVisualizerStyleDots ? 0 : width;
-    _shape.path = path.CGPath;
+    if (_alternates.count) {
+        for (NSUInteger p = 0; p < _alternates.count; p++) {
+            _alternates[p].lineWidth = lineWidth;
+            _alternates[p].path = p < paths ? all[p].CGPath : nil;
+        }
+    } else {
+        _shape.lineWidth = lineWidth;
+        _shape.path = all[0].CGPath;
+    }
     [CATransaction commit];
 }
 

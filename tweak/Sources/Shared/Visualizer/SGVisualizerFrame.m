@@ -23,8 +23,13 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
     SGVisualizerColor colour = (SGVisualizerColor)SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent);
     BOOL mirror = SGEnabled(SGKeyVisualizerMirror);
     CGFloat widthFactor = SGVisualizerWidthFactor();
-    NSArray<UIColor *> *stops = colour == SGVisualizerColorCover ? SGCoverGradientStops(palette, mirror) : nil;
-    BOOL gradient = colour == SGVisualizerColorSpectrum || stops.count > 0;
+    // A gradient colour's colours, as the player's ring has them (SGVisualizerView.m): Spectrum's hues, or the
+    // cover's handed in (none yet, and the accent stands in, as there).
+    NSArray<UIColor *> *colours = colour == SGVisualizerColorSpectrum ? SGVisualizerSpectrumColours()
+                                : colour == SGVisualizerColorCover && palette.count ? palette : nil;
+    SGVisualizerGradient shape = (SGVisualizerGradient)SGInt(SGKeyVisualizerGradient, SGVisualizerGradientAlong);
+    if (colours.count < 2) colours = nil;
+    NSArray<UIColor *> *stops = colours ? SGVisualizerGradientStops(colours, shape, mirror, colour == SGVisualizerColorSpectrum) : nil;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.scale = 1;
     format.opaque = YES;
@@ -62,7 +67,8 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
             CGContextRestoreGState(context);
         }
 
-        // The bars round it.
+        // The bars round it, as one path: stroked in one colour, or turned into the outline of its strokes and
+        // used as a clip for a radial gradient along every bar; a colour a bar round the ring, or bar by bar.
         NSInteger count = mirror ? bands * 2 : bands;
         if (count > 0 && reach > 0 && bars) {
             CGFloat step = 2 * M_PI / count;
@@ -72,13 +78,19 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
             CGFloat width = MIN(side * 0.014 * widthFactor, room * 0.55 * widthFactor);
             width = MIN(width, MAX(1, room * 0.95));
             width = MAX(width, MIN(2, room * 1.1));
+            CGFloat waveWidth = MAX(2, side * 0.006 * MAX(1, widthFactor));
             UIColor *plain = colour == SGVisualizerColorWhite ? UIColor.whiteColor : (accent ?: UIColor.whiteColor);
+            BOOL along = colours && shape == SGVisualizerGradientAlong;
+            BOOL perBar = colours && !along;
             CGContextSetLineCap(context, kCGLineCapRound);
             CGContextSetLineJoin(context, kCGLineJoinRound);
-            CGPoint tips[count];
-            if (!gradient) [plain setStroke];
-            if (!gradient) [plain setFill];
-            CGContextSetLineWidth(context, width);
+            CGPoint *tips = malloc(sizeof(CGPoint) * (size_t)count);
+            CGMutablePathRef path = CGPathCreateMutable();
+            // The colour of bar `i`, for the gradients that colour bar by bar.
+            UIColor *(^barColour)(NSInteger) = ^UIColor *(NSInteger i) {
+                if (shape == SGVisualizerGradientAlternating) return stops[(NSUInteger)i % stops.count];
+                return SGCoverGradientColor(stops, (CGFloat)(i + 0.5) / count);
+            };
             for (NSInteger i = 0; i < count; i++) {
                 NSInteger band = mirror ? (i < bands ? i : count - 1 - i) : i;
                 CGFloat value = MAX(0, MIN(1, bars[band]));
@@ -88,41 +100,78 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
                 CGPoint from = CGPointMake(centre.x + dx * inner, centre.y + dy * inner);
                 CGPoint to = CGPointMake(centre.x + dx * out, centre.y + dy * out);
                 tips[i] = to;
-                // One colour is one path, stroked once below; a gradient is a stroke a bar.
-                UIColor *color = nil;
-                if (gradient) {
-                    color = stops ? SGCoverGradientColor(stops, (CGFloat)(i + 0.5) / count)
-                                  : [UIColor colorWithHue:(CGFloat)i / count saturation:0.75 brightness:1 alpha:1];
-                }
-                switch (style) {
-                    case SGVisualizerStyleBars:
-                        if (color) [color setStroke];
+                if (style == SGVisualizerStyleWave) continue;
+                if (perBar) {
+                    // A colour of its own: drawn now.
+                    if (style == SGVisualizerStyleBars) {
+                        [barColour(i) setStroke];
+                        CGContextSetLineWidth(context, width);
                         CGContextMoveToPoint(context, from.x, from.y);
                         CGContextAddLineToPoint(context, to.x, to.y);
-                        if (color) CGContextStrokePath(context);
-                        break;
-                    case SGVisualizerStyleDots:
-                        if (color) [color setFill];
+                        CGContextStrokePath(context);
+                    } else {
+                        [barColour(i) setFill];
                         CGContextFillEllipseInRect(context, CGRectMake(to.x - width * 0.6, to.y - width * 0.6, width * 1.2, width * 1.2));
-                        break;
-                    case SGVisualizerStyleWave:
-                        break;
+                    }
+                    continue;
+                }
+                if (style == SGVisualizerStyleBars) {
+                    CGPathMoveToPoint(path, NULL, from.x, from.y);
+                    CGPathAddLineToPoint(path, NULL, to.x, to.y);
+                } else {
+                    CGPathAddEllipseInRect(path, NULL, CGRectMake(to.x - width * 0.6, to.y - width * 0.6, width * 1.2, width * 1.2));
                 }
             }
-            if (style == SGVisualizerStyleBars && !gradient) CGContextStrokePath(context);
             if (style == SGVisualizerStyleWave) {
-                CGContextSetLineWidth(context, MAX(2, side * 0.006 * MAX(1, widthFactor)));
-                for (NSInteger i = 0; i < count; i++) {
-                    CGPoint a = tips[i], b = tips[(i + 1) % count];
-                    UIColor *color = plain;
-                    if (stops) color = SGCoverGradientColor(stops, (CGFloat)(i + 0.5) / count);
-                    else if (gradient) color = [UIColor colorWithHue:(CGFloat)i / count saturation:0.75 brightness:1 alpha:1];
-                    [color setStroke];
-                    CGContextMoveToPoint(context, a.x, a.y);
-                    CGContextAddLineToPoint(context, b.x, b.y);
-                    CGContextStrokePath(context);
+                if (perBar) {
+                    CGContextSetLineWidth(context, waveWidth);
+                    for (NSInteger i = 0; i < count; i++) {
+                        [barColour(i) setStroke];
+                        CGContextMoveToPoint(context, tips[i].x, tips[i].y);
+                        CGContextAddLineToPoint(context, tips[(i + 1) % count].x, tips[(i + 1) % count].y);
+                        CGContextStrokePath(context);
+                    }
+                } else {
+                    CGPathAddLines(path, NULL, tips, (size_t)count);
+                    CGPathCloseSubpath(path);
                 }
             }
+            if (!perBar && !CGPathIsEmpty(path)) {
+                CGFloat lineWidth = style == SGVisualizerStyleWave ? waveWidth : width;
+                if (along) {
+                    // The strokes' outline (a dot's own shape) as the clip, the gradient from inside to tip.
+                    CGContextSaveGState(context);
+                    CGContextAddPath(context, path);
+                    if (style != SGVisualizerStyleDots) {
+                        CGContextSetLineWidth(context, lineWidth);
+                        CGContextReplacePathWithStrokedPath(context);
+                    }
+                    CGContextClip(context);
+                    NSMutableArray *cgColours = [NSMutableArray array];
+                    for (UIColor *stop in stops) [cgColours addObject:(id)stop.CGColor];
+                    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+                    CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)cgColours, NULL);
+                    CGColorSpaceRelease(space);
+                    if (gradient) {
+                        CGContextDrawRadialGradient(context, gradient, centre, inner, centre, inner + reach,
+                                                    kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
+                        CGGradientRelease(gradient);
+                    }
+                    CGContextRestoreGState(context);
+                } else {
+                    CGContextAddPath(context, path);
+                    if (style == SGVisualizerStyleDots) {
+                        [plain setFill];
+                        CGContextFillPath(context);
+                    } else {
+                        [plain setStroke];
+                        CGContextSetLineWidth(context, lineWidth);
+                        CGContextStrokePath(context);
+                    }
+                }
+            }
+            CGPathRelease(path);
+            free(tips);
         }
 
         // The line being sung, and the next one dimmer, under the ring.

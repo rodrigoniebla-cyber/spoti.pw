@@ -14,5 +14,5 @@ NSArray<SGModSection *> *SGRNowPlayingSections(void) {
             SGOptionRow(@"Music app style menu", @"A menu of glass in place of the sheet", SGRKeyPlayerMusicMenu),
         ], @"Off, the ⋯ slides Spotify's own sheet up from the bottom with all its options, and Speed and pitch in it. "
            "On, the same options open as a menu grown out of the button, as the Music app draws one. Applies after you restart Spotify."),
-    ] arrayByAddingObjectsFromArray:[SGRPlayerBackgroundSections() arrayByAddingObjectsFromArray:SGRPlayerVisualizerSections()]];
+    ] arrayByAddingObjectsFromArray:SGRPlayerBackgroundSections()];
 }

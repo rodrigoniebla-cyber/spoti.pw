@@ -271,6 +271,8 @@ static void scaleEveryCover(BOOL animated) {
         ring.bounds = (CGRect){CGPointZero, bounds.size};
         ring.center = middle;
         ring.accent = SGRAccentColor() ?: [UIColor colorWithRed:0.12 green:0.84 blue:0.38 alpha:1];
+        // The Cover gradient reads the cover as it is shown here.
+        ring.coverView = cover;
         if (ring.superview == tilt && tilt.subviews.firstObject != ring) [tilt sendSubviewToBack:ring];
     }
     plate.center = cover.center;

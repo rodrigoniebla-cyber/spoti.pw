@@ -4,6 +4,7 @@
 #import "Shared/Lyrics/Lyrics.h"
 #import "SGPalette.h"
 #import "SGCoverPalette.h"
+#import "Visualizer.h"
 
 const NSInteger SGCoverPaletteColors = 4;
 NSNotificationName const SGCoverPaletteDidChangeNotification = @"spotifyglass.coverPaletteChanged";
@@ -32,6 +33,8 @@ NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image) {
 #pragma mark - the playing track's
 
 static NSString *sg_paletteTrack;
+// The track the cover on screen was last read for: the now playing artwork's read gives way to it.
+static NSString *sg_offeredTrack;
 static BOOL sg_reading;
 static NSArray<UIColor *> *sg_palette;
 static CFTimeInterval sg_retryAt;
@@ -51,6 +54,10 @@ NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void) {
         NSArray<UIColor *> *colors = SGCoverPaletteOfImage([cover imageWithSize:CGSizeMake(64, 64)]);
         dispatch_async(dispatch_get_main_queue(), ^{
             sg_reading = NO;
+            if ([wanted isEqualToString:sg_offeredTrack]) {
+                sg_paletteTrack = wanted;
+                return;
+            }
             // An image that could not be read is tried again the next time it is asked for.
             if (!colors) {
                 sg_retryAt = CACurrentMediaTime() + 3;
@@ -62,6 +69,30 @@ NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void) {
         });
     });
     return sg_palette;
+}
+
+static dispatch_queue_t paletteQueue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("spotifyglass.cover-palette.shown", DISPATCH_QUEUE_SERIAL); });
+    return queue;
+}
+
+void SGCoverPaletteOfferImage(UIImage *image) {
+    static const void *offered;
+    if (!image.CGImage || (__bridge const void *)image == offered) return;
+    offered = (__bridge const void *)image;
+    NSString *track = SGKaraokePlayingTrack();
+    dispatch_async(paletteQueue(), ^{
+        NSArray<UIColor *> *colors = SGCoverPaletteOfImage(image);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!colors || offered != (__bridge const void *)image) return;
+            sg_offeredTrack = track;
+            sg_paletteTrack = track;
+            sg_palette = colors;
+            [NSNotificationCenter.defaultCenter postNotificationName:SGCoverPaletteDidChangeNotification object:nil];
+        });
+    });
 }
 
 #pragma mark - round the ring
@@ -88,4 +119,60 @@ UIColor *SGCoverGradientColor(NSArray<UIColor *> *stops, CGFloat t) {
     [stops[from] getRed:&r0 green:&g0 blue:&b0 alpha:NULL];
     [stops[from + 1] getRed:&r1 green:&g1 blue:&b1 alpha:NULL];
     return [UIColor colorWithRed:r0 + (r1 - r0) * share green:g0 + (g1 - g0) * share blue:b0 + (b1 - b0) * share alpha:1];
+}
+
+#pragma mark - the gradient colours
+
+const NSInteger SGVisualizerRepeats = 4;
+
+NSArray<UIColor *> *SGVisualizerSpectrumColours(void) {
+    static NSArray<UIColor *> *hues;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSMutableArray *list = [NSMutableArray array];
+        for (int i = 0; i < 6; i++) [list addObject:[UIColor colorWithHue:i / 6.0 saturation:0.75 brightness:1 alpha:1]];
+        hues = list;
+    });
+    return hues;
+}
+
+NSArray<UIColor *> *SGVisualizerGradientColours(NSInteger colour, UIColor *accent) {
+    if (colour == SGVisualizerColorSpectrum) return SGVisualizerSpectrumColours();
+    if (colour != SGVisualizerColorCover) return nil;
+    return SGCoverPaletteForPlayingTrack() ?: @[accent ?: UIColor.whiteColor];
+}
+
+static CGFloat luminance(UIColor *color) {
+    CGFloat r = 1, g = 1, b = 1;
+    [color getRed:&r green:&g blue:&b alpha:NULL];
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+NSArray<UIColor *> *SGVisualizerGradientStops(NSArray<UIColor *> *colours, NSInteger gradient, BOOL mirror, BOOL spectrum) {
+    if (!colours.count) return nil;
+    if (colours.count == 1) return @[colours[0], colours[0]];
+    switch (gradient) {
+        case SGVisualizerGradientAround:
+            if (spectrum && !mirror) return [colours arrayByAddingObject:colours[0]];
+            return SGCoverGradientStops(colours, mirror);
+        case SGVisualizerGradientRepeating: {
+            // There and back, SGVisualizerRepeats times, ending where it began.
+            NSMutableArray<UIColor *> *stops = [NSMutableArray array];
+            for (NSInteger turn = 0; turn < SGVisualizerRepeats; turn++) {
+                [stops addObjectsFromArray:colours];
+                for (NSInteger i = (NSInteger)colours.count - 2; i >= 1; i--) [stops addObject:colours[(NSUInteger)i]];
+            }
+            [stops addObject:colours[0]];
+            return stops;
+        }
+        case SGVisualizerGradientAlternating:
+            return colours;
+        default:
+            // Along a bar: darkest inside, lightest at the tip, so every bar glows outward.
+            if (spectrum) return colours;
+            return [colours sortedArrayUsingComparator:^NSComparisonResult(UIColor *a, UIColor *b) {
+                CGFloat x = luminance(a), y = luminance(b);
+                return x < y ? NSOrderedAscending : x > y ? NSOrderedDescending : NSOrderedSame;
+            }];
+    }
 }

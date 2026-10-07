@@ -19,6 +19,8 @@
 #define SGKeyVisualizerLikeHaptics @"spotifyglass.visualizer.likeHaptics"   // off until switched on
 #define SGKeyVisualizerBars @"spotifyglass.visualizer.bars"           // an index into the counts below: 48 to 1024
 #define SGKeyVisualizerWidth @"spotifyglass.visualizer.width"         // an SGVisualizerWidth
+// How a gradient colour (Spectrum, Cover gradient) lies on the ring, an SGVisualizerGradient.
+#define SGKeyVisualizerGradient @"spotifyglass.visualizer.gradient"
 // How much of the ring the lowest notes get: an index into Even (one log scale, 40 Hz up), a fifth (unset), a
 // quarter and a third of the bars for 20 to 100 Hz, the rest log spaced from 100 Hz up. Bass is all bass anyway.
 #define SGKeyVisualizerBassShare @"spotifyglass.visualizer.bassShare"
@@ -45,6 +47,13 @@ typedef NS_ENUM(NSInteger, SGVisualizerColor) {
     SGVisualizerColorWhite,
     SGVisualizerColorSpectrum,     // a hue all the way round
     SGVisualizerColorCover,        // a gradient through the playing cover's main colours (SGCoverPalette.h)
+};
+
+typedef NS_ENUM(NSInteger, SGVisualizerGradient) {
+    SGVisualizerGradientAlong = 0,   // along every bar, from the inside out, the same on each (unset)
+    SGVisualizerGradientAround,      // once round the ring
+    SGVisualizerGradientRepeating,   // there and back round the ring, several times over
+    SGVisualizerGradientAlternating, // each bar one colour, the next bar the next colour
 };
 
 typedef NS_ENUM(NSInteger, SGVisualizerWidth) {
@@ -87,9 +96,12 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
 // to read yet (the bars then fall, which this does too).
 BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed);
 
-@class SGModRow;
-// VisualizerSettings.m: the rows that set it up, for the page of whoever shows a ring, greyed out while the
-// switch under `waitsOnKey` (off until switched on) is off; nil for none.
-NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey);
+@class SGModRow, SGModSection, UIViewController;
+// VisualizerSettings.m: the sections that set it up (Sound, Shape, Colour), greyed out while the switch under
+// `waitsOnKey` (off until switched on) is off; nil for none.
+NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey);
+// Its page, opened from the Player page under either look: `leading` (the redesign's switch for the ring in
+// its player) first, then its sections, then the lock screen's.
+UIViewController *SGVisualizerSettingsPage(NSArray<SGModSection *> *leading, NSString *waitsOnKey, NSString *intro);
 // The lock screen's switch and how often it draws, under either look.
 NSArray<SGModRow *> *SGLockScreenVisualizerRows(void);

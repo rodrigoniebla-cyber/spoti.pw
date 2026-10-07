@@ -55,7 +55,7 @@ static void changed(void) {
     [NSNotificationCenter.defaultCenter postNotificationName:SGVisualizerSettingsDidChangeNotification object:nil];
 }
 
-NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
+NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
     BOOL (^own)(void) = ^BOOL { return !SGFlag(SGKeyVisualizerLikeHaptics, NO); };
     SGModRow *likeHaptics = SGOptionRow(@"Same as Music Haptics", @"Its strength and what it follows", SGKeyVisualizerLikeHaptics);
     likeHaptics.changed = ^(BOOL on) { changed(); };
@@ -96,6 +96,15 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     SGModRow *color = SGChoiceRow(@"Colour", nil, SGKeyVisualizerColor, @[@"Accent", @"White", @"Spectrum", @"Cover gradient"], SGVisualizerColorAccent);
     color.choiceNotes = @[@"The look's accent colour", @"Plain white", @"Every hue, round the ring", @"A gradient of the cover's own colours, changing with each song"];
     color.chosen = ^(NSInteger index) { changed(); };
+    SGModRow *gradient = SGChoiceRow(@"Gradient", nil, SGKeyVisualizerGradient, @[@"Along each bar", @"Around the ring", @"Repeating", @"Bar by bar"],
+                                     SGVisualizerGradientAlong);
+    gradient.choiceNotes = @[@"Every bar goes through the colours from the inside out", @"Once round the whole ring",
+                             @"There and back round the ring, four times over", @"Each bar one colour, the next bar the next"];
+    gradient.chosen = ^(NSInteger index) { changed(); };
+    gradient.visible = ^BOOL {
+        NSInteger colour = SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent);
+        return colour == SGVisualizerColorSpectrum || colour == SGVisualizerColorCover;
+    };
     SGModRow *mirror = SGSwitchRow(@"Mirror", @"Each side the other's reflection", SGKeyVisualizerMirror);
     mirror.changed = ^(BOOL on) { changed(); };
     SGModRow *peaks = SGOptionRow(@"Peaks", @"A cap at each bar's peak that falls slowly", SGKeyVisualizerPeaks);
@@ -104,9 +113,27 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     SGModRow *rotation = SGChoiceRow(@"Rotation", nil, SGKeyVisualizerRotation, @[@"Off", @"Slow", @"Fast"], 0);
     rotation.choiceNotes = @[@"The ring stays put", @"A turn every 40 seconds", @"A turn every 12 seconds"];
     rotation.chosen = ^(NSInteger index) { changed(); };
-    NSArray<SGModRow *> *rows = @[likeHaptics, strength, follows, bass, response, bars, width, height, style, color, mirror, peaks, rotation];
-    if (waitsOnKey) for (SGModRow *row in rows) SGWaitsOn(row, waitsOnKey, NO);
-    return rows;
+    NSArray<NSArray<SGModRow *> *> *groups = @[@[likeHaptics, strength, follows, bass, response],
+                                               @[bars, width, height, style, mirror, peaks, rotation],
+                                               @[color, gradient]];
+    if (waitsOnKey) for (NSArray<SGModRow *> *group in groups) for (SGModRow *row in group) SGWaitsOn(row, waitsOnKey, NO);
+    return @[
+        SGNotedSection(@"Sound", groups[0], @"Strength and Follows work as Music Haptics' do. Bass area is how much of the ring the "
+                                             "lowest notes, 20 to 100 Hz, get; the rest runs from 100 Hz up."),
+        SGNotedSection(@"Shape", groups[1], @"Peaks and Rotation are the player's only."),
+        SGNotedSection(@"Colour", groups[2], @"Cover gradient takes its colours from the cover on screen, the main colours in it, "
+                                              "lightened to show on black."),
+    ];
+}
+
+UIViewController *SGVisualizerSettingsPage(NSArray<SGModSection *> *leading, NSString *waitsOnKey, NSString *intro) {
+    NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithArray:leading ?: @[]];
+    [sections addObjectsFromArray:SGVisualizerSections(waitsOnKey)];
+    [sections addObject:SGNotedSection(@"Lock screen", SGLockScreenVisualizerRows(),
+        @"The lock screen's artwork becomes the cover in the ring, drawn again several times a second while the song plays, in the "
+         "style and colour above. With lock screen lyrics showing the line as the artwork, the line sits under the ring. An animated "
+         "cover (Canvas) shows over it. Applies after you restart Spotify.")];
+    return [[SGModPage alloc] initWithTitle:@"Visualizer" intro:intro sections:sections footer:nil];
 }
 
 static NSArray<NSNumber *> *rates(void) { return @[@6, @10, @15]; }

@@ -192,12 +192,16 @@ Shared:
                   everything, the beat or the bass at a strength, as Music Haptics does or with Music Haptics' own
                   settings; SGVisualizerView draws them as bars, a wave or dots, thin, normal or thick, short, medium or
                   full height, with falling peak caps and a slow or fast turn of the whole ring if asked, in the accent,
-                  white, every hue or the Cover gradient (SGCoverPalette.m: the playing cover's four main colours, off
-                  the main thread from the now playing artwork once per track, SGPalette.m, plain C, voting by hue
-                  weighted by saturation and brightness, tested in harness/visualizer/palette_test.c; drawn as a conic
-                  gradient under the bars, mirrored when the ring is, fading to the next track's) on a display link run the lyrics'
+                  white, every hue or the Cover gradient (SGCoverPalette.m: the cover's four main colours, read off the
+                  cover the player shows, or the now playing artwork where nothing shows one, off the main thread;
+                  SGPalette.m, plain C, k-means in OKLab weighted by how vivid each pixel is, black left out and the rest
+                  lightened to show on black, tested in harness/visualizer/palette_test.c), a gradient colour laid along
+                  every bar from its darkest colour inside to its lightest at the tip (a radial gradient the bars mask),
+                  once round the ring, there and back four times, or bar by bar (a shape layer a colour), fading to the
+                  next track's on a display link run the lyrics'
                   way (60 to 120 Hz, down during player transitions and off screen). The redesigned player rings
-                  its cover with one (PlayerArtwork.x, Player page > Visualizer): the cover a circle at 64 % with a
+                  its cover with one (PlayerArtwork.x; Mod Settings > Player > Visualizer, a page of its own under either look,
+                  VisualizerSettings.m, Sound, Shape, Colour and Lock screen): the cover a circle at 64 % with a
                   round shadow, the ring behind it in the tilt view fading with it, and the picture inside slowly
                   turning while the song plays
     HeadMotion/   AirPods head tracking, one CMHeadphoneMotionManager the features share, running only while one asks
