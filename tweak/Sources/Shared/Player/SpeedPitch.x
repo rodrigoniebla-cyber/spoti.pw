@@ -50,6 +50,9 @@
 
 // The unit stays in this long after speed and pitch both came back to normal.
 static const double kOffAfter = 1.5;
+// What SGPlayerApplySpeedPitch takes: the panel's own range.
+static const double kWantedMinSpeed = 0.5, kWantedMaxSpeed = 2;
+static const float kWantedMaxPitch = 12;
 
 #pragma mark - shared between the threads
 
@@ -220,6 +223,7 @@ static void readFormat(AudioUnit unit) {
 }
 
 static void apply(void);
+static void applyWanted(void);
 
 static void prepareOutput(AudioUnit unit) {
     // The pipeline has excluded rendering while the graph changes. Do not run the previous
@@ -227,6 +231,7 @@ static void prepareOutput(AudioUnit unit) {
     atomic_store(&sg_engaged, false);
     readFormat(unit);
     dispatch_async(dispatch_get_main_queue(), ^{
+        applyWanted();
         if (sg_speed != 1 || sg_semitones != 0) apply();
     });
 }
@@ -375,6 +380,34 @@ void SGSetPlayerPitchFollowsSpeed(BOOL follows) {
     // The pitch slider goes while pitch follows, so what it had set goes with it.
     if (follows) sg_semitones = 0;
     apply();
+}
+
+#pragma mark - set as a whole
+
+NSNotificationName const SGSpeedPitchValuesChangedNotification = @"SGSpeedPitchValuesChangedNotification";
+
+// What a preset, Siri or a shortcut asked for before the output could take it. Main thread.
+static BOOL sg_hasWanted, sg_wantedFollows;
+static float sg_wantedSpeed = 1, sg_wantedSemitones;
+
+static void applyWanted(void) {
+    if (!sg_hasWanted || !tapped()) return;
+    sg_hasWanted = NO;
+    SGSetPlayerPitchFollowsSpeed(sg_wantedFollows);
+    SGSetPlayerSpeed(sg_wantedSpeed);
+    SGSetPlayerPitch(sg_wantedFollows ? 0 : sg_wantedSemitones);
+    SGLog(@"speed and pitch: set to %.2fx, %@", sg_wantedSpeed, sg_wantedFollows ? @"pitch following" : [NSString stringWithFormat:@"%+.0f st", sg_wantedSemitones]);
+    [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchValuesChangedNotification object:nil];
+}
+
+void SGPlayerApplySpeedPitch(double speed, float semitones, BOOL follows) {
+    if (!isfinite(speed) || !isfinite(semitones)) return;
+    sg_wantedSpeed = (float)MAX(kWantedMinSpeed, MIN(kWantedMaxSpeed, speed));
+    sg_wantedSemitones = roundf(MAX(-kWantedMaxPitch, MIN(kWantedMaxPitch, semitones)));
+    sg_wantedFollows = follows;
+    sg_hasWanted = YES;
+    if (!tapped()) SGLog(@"speed and pitch: %.2fx asked for before Spotify's output has started, kept until it does", sg_wantedSpeed);
+    applyWanted();
 }
 
 #pragma mark - Spotify's clock

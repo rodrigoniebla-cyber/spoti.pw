@@ -38,10 +38,13 @@
 #import "Shared/Haptics/Haptics.h"
 #import "Shared/AudioEffects/AudioEffects.h"
 #import "SpeedPitch.h"
+#import "SpeedPitchPresets.h"
 
 // A menu this soon after the more button's tap is the player's.
 static const NSTimeInterval kMenuAfterTap = 3;
 static const CGFloat kRowHeight = 56, kSliderBlockHeight = 72, kFollowHeight = 44, kPanelBottom = 12;
+// The panel's lines: the preset, speed, the switch, reverb and pitch.
+static const NSInteger kSwitchLines = 3;
 // The block's own measures and type, so it stands on Spotify's sheet under either look rather than on
 // the redesign's Kit: the sheet's side margin, the gap everything else is a multiple of, and a spring
 // that settles without overshooting.
@@ -109,8 +112,9 @@ NSNotificationName const SGSpeedPitchChangedNotification = @"SGSpeedPitchChanged
     UIImageView *_icon, *_chevron;
     UILabel *_title, *_summary;
     UIView *_panel;
-    UILabel *_speedName, *_pitchName, *_followName, *_reverbName;
-    UIButton *_speedValue, *_pitchValue, *_reverb;
+    UILabel *_speedName, *_pitchName, *_followName, *_reverbName, *_presetName;
+    UIButton *_speedValue, *_pitchValue, *_reverb, *_preset;
+    id _presetsObserver, _valuesObserver;
     UISlider *_speed, *_pitch;
     UISwitch *_follow;
     float _shownSpeed, _shownPitch;
@@ -257,15 +261,47 @@ static void placeTick(UISlider *slider) {
     _reverb.tintColor = primary();
     _reverb.showsMenuAsPrimaryAction = YES;
     _reverb.accessibilityLabel = @"Reverb";
-    for (UIView *view in @[_speedName, _speedValue, _speed, _followName, _follow, _reverbName, _reverb, _pitchName, _pitchValue, _pitch]) [_panel addSubview:view];
+    _presetName = makeLabel(nameFont, secondary());
+    _presetName.text = @"Preset";
+    _presetName.isAccessibilityElement = NO;
+    UIButtonConfiguration *preset = [UIButtonConfiguration plainButtonConfiguration];
+    preset.image = paintedSymbol(@"chevron.up.chevron.down", 11, UIImageSymbolWeightSemibold, secondary());
+    preset.imagePlacement = NSDirectionalRectEdgeTrailing;
+    preset.imagePadding = 6;
+    preset.contentInsets = NSDirectionalEdgeInsetsZero;
+    preset.baseForegroundColor = primary();
+    _preset = [UIButton buttonWithConfiguration:preset primaryAction:nil];
+    _preset.tintColor = primary();
+    _preset.showsMenuAsPrimaryAction = YES;
+    _preset.accessibilityLabel = @"Preset";
+    for (UIView *view in @[_presetName, _preset, _speedName, _speedValue, _speed, _followName, _follow, _reverbName, _reverb, _pitchName, _pitchValue, _pitch]) [_panel addSubview:view];
+
+    // A preset used from Siri or a shortcut, or saved from Mod Settings, shows here at once.
+    __weak SGSpeedPitchView *weakSelf = self;
+    _presetsObserver = [NSNotificationCenter.defaultCenter addObserverForName:SGSpeedPitchPresetsChangedNotification object:nil
+                                                                        queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+        [weakSelf refreshPresets];
+    }];
+    _valuesObserver = [NSNotificationCenter.defaultCenter addObserverForName:SGSpeedPitchValuesChangedNotification object:nil
+                                                                       queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
+        SGSpeedPitchView *view = weakSelf;
+        if (!view) return;
+        [view refresh];
+        if (view.window) [view resize];
+    }];
 
     [self refresh];
     return self;
 }
 
-// The sliders' part: speed, the switch, reverb, and pitch unless it follows speed.
+- (void)dealloc {
+    if (_presetsObserver) [NSNotificationCenter.defaultCenter removeObserver:_presetsObserver];
+    if (_valuesObserver) [NSNotificationCenter.defaultCenter removeObserver:_valuesObserver];
+}
+
+// The sliders' part: the preset, speed, the switch, reverb, and pitch unless it follows speed.
 static CGFloat panelHeight(void) {
-    return kSliderBlockHeight + 2 * kFollowHeight + (SGPlayerPitchFollowsSpeed() ? 0 : kSliderBlockHeight) + kPanelBottom;
+    return kSliderBlockHeight + kSwitchLines * kFollowHeight + (SGPlayerPitchFollowsSpeed() ? 0 : kSliderBlockHeight) + kPanelBottom;
 }
 
 // Reverb's choices: none, then the audio effects' rooms.
@@ -303,9 +339,9 @@ static void setReverbChoice(NSInteger preset) {
 
     _row.hidden = self.panelOnly;
     // Pitch stays laid out under the switch when it folds away, so it fades where it was rather than moving.
-    _panel.frame = CGRectMake(0, self.panelOnly ? 0 : kRowHeight, width, kSliderBlockHeight + 2 * kFollowHeight + kSliderBlockHeight + kPanelBottom);
+    _panel.frame = CGRectMake(0, self.panelOnly ? 0 : kRowHeight, width, kSliderBlockHeight + kSwitchLines * kFollowHeight + kSliderBlockHeight + kPanelBottom);
     CGFloat y = 0;
-    for (NSArray<UIView *> *line in @[@[_speedName, _speedValue, _speed], @[_followName, _follow], @[_reverbName, _reverb], @[_pitchName, _pitchValue, _pitch]]) {
+    for (NSArray<UIView *> *line in @[@[_presetName, _preset], @[_speedName, _speedValue, _speed], @[_followName, _follow], @[_reverbName, _reverb], @[_pitchName, _pitchValue, _pitch]]) {
         if (line.count == 2) {
             CGSize toggle = [line[1] sizeThatFits:CGSizeMake(width / 2, kFollowHeight)];
             toggle.width = MIN(toggle.width, width / 2);
@@ -371,6 +407,7 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     _follow.enabled = speedAllowed;
     _followName.alpha = speedAllowed ? 1 : 0.4;
     [self refreshReverb];
+    [self refreshPresets];
     [self showValues];
 }
 
@@ -402,6 +439,57 @@ static NSString *summaryText(float speed, BOOL speedShown, float pitch, BOOL fol
     for (UIView *view in @[_pitchName, _pitchValue, _pitch]) view.accessibilityElementsHidden = follows;
     [NSNotificationCenter.defaultCenter postNotificationName:SGSpeedPitchChangedNotification object:nil
                                                     userInfo:summary ? @{@"summary": summary} : nil];
+}
+
+// The preset button reads the preset the speed and pitch are, or Custom, and offers the saved ones, a check
+// against the one set, then saving the current as a new one and deleting.
+- (void)refreshPresets {
+    NSArray<SGSpeedPitchPreset *> *presets = SGSpeedPitchPresets();
+    SGSpeedPitchPreset *current = nil;
+    for (SGSpeedPitchPreset *preset in presets) if (SGSpeedPitchPresetIsCurrent(preset)) { current = preset; break; }
+    BOOL normal = SGPlayerSpeed() == 1 && SGPlayerPitch() == 0;
+    NSString *title = current ? current.name : normal ? (presets.count ? @"None" : @"None saved") : @"Custom";
+    UIButtonConfiguration *configuration = _preset.configuration;
+    configuration.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:@{
+        NSFontAttributeName: font(UIFontTextStyleSubheadline, UIFontWeightSemibold, UIContentSizeCategoryExtraLarge),
+        NSForegroundColorAttributeName: primary(),
+    }];
+    [UIView performWithoutAnimation:^{
+        self->_preset.configuration = configuration;
+        [self->_preset layoutIfNeeded];
+    }];
+    _preset.accessibilityValue = title;
+    __weak SGSpeedPitchView *weakSelf = self;
+    NSMutableArray<UIMenuElement *> *items = [NSMutableArray array];
+    for (SGSpeedPitchPreset *preset in presets) {
+        UIAction *use = [UIAction actionWithTitle:preset.name image:nil identifier:nil handler:^(UIAction *action) {
+            SGSpeedPitchPresetApply(preset);
+            [weakSelf refresh];
+        }];
+        use.subtitle = SGSpeedPitchPresetSummary(preset);
+        use.state = preset == current ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [items addObject:use];
+    }
+    NSMutableArray<UIMenuElement *> *groups = [NSMutableArray array];
+    if (items.count) [groups addObject:[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:items]];
+    NSMutableArray<UIMenuElement *> *more = [NSMutableArray array];
+    UIAction *save = [UIAction actionWithTitle:@"Save current as preset…" image:[UIImage systemImageNamed:@"plus"] identifier:nil handler:^(UIAction *action) {
+        SGSpeedPitchPresetPromptSave(^(SGSpeedPitchPreset *saved) { [weakSelf refreshPresets]; });
+    }];
+    [more addObject:save];
+    if (presets.count) {
+        NSMutableArray<UIMenuElement *> *deletes = [NSMutableArray array];
+        for (SGSpeedPitchPreset *preset in presets) {
+            UIAction *remove = [UIAction actionWithTitle:preset.name image:nil identifier:nil handler:^(UIAction *action) {
+                SGSpeedPitchPresetDelete(preset);
+            }];
+            remove.attributes = UIMenuElementAttributesDestructive;
+            [deletes addObject:remove];
+        }
+        [more addObject:[UIMenu menuWithTitle:@"Delete preset" image:[UIImage systemImageNamed:@"trash"] identifier:nil options:0 children:deletes]];
+    }
+    [groups addObject:[UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline children:more]];
+    _preset.menu = [UIMenu menuWithTitle:@"Preset" children:groups];
 }
 
 // The reverb button reads the room it is set to and offers the others, a check against the one set.

@@ -11,6 +11,7 @@
 #import "Shared/Visualizer/Visualizer.h"
 #import "Shared/Fonts/AppFont.h"
 #import "Shared/Player/PlayerSettings.h"
+#import "Shared/Player/SpeedPitchPresets.h"
 #import "Native/Appearance/Appearance.h"
 #import "Native/Navbar/Navbar.h"
 #import "Native/NowPlayingBar/NowPlayingBar.h"
@@ -88,12 +89,15 @@ UIViewController *SGPlayerSettingsPage(void) {
     blocked.value = ^NSString *{
         return SGFlag(SGKeyArtistBlock, NO) ? @(SGBlockedArtists().count).stringValue : @"Off";
     };
+    SGModRow *presets = SGPageRow(@"Speed and pitch presets", ^UIViewController *{ return SGSpeedPitchPresetsPage(); });
+    presets.value = ^NSString *{ return SGSpeedPitchPresetsCountText(); };
     BOOL native = !SGRedesignedUIStored();
 
     NSMutableArray<SGModSection *> *sections = [NSMutableArray arrayWithObject:SGSection(nil, @[
         SGWithSymbol(SGPageRow(@"Gestures", ^UIViewController *{ return SGGesturesSettingsPage(); }), @"hand.tap"),
         SGWithSymbol(SGOptionRow(@"Hold to play faster", @"Either side of the cover, 2× until you let go", SGKeyGestureHold), @"forward"),
         SGWithSymbol(blocked, @"person.crop.circle.badge.xmark"),
+        SGWithSymbol(presets, @"slider.horizontal.3"),
     ])];
     NSMutableArray<SGModRow *> *pages = [NSMutableArray array];
     if (native) {

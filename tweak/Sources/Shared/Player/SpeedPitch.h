@@ -44,5 +44,12 @@ BOOL SGPlayerPitchAvailable(void);
 BOOL SGPlayerPitchFollowsSpeed(void);
 void SGSetPlayerPitchFollowsSpeed(BOOL follows);
 
+// Speed, pitch and whether pitch follows speed set as one, for a preset, Siri or a shortcut (SpeedPitchPresets.h),
+// whenever they are asked for: speed 0.5...2, semitones -12...12 (ignored while pitch follows speed). Before
+// Spotify's output has started there is nothing to change yet, so they are kept and applied the moment it does.
+// Posts SGSpeedPitchValuesChangedNotification once they are in, for a panel that is open to show them.
+void SGPlayerApplySpeedPitch(double speed, float semitones, BOOL follows);
+extern NSNotificationName const SGSpeedPitchValuesChangedNotification;
+
 // Current downstream processing delay, in seconds. Atomic unit ownership; safe off-render.
 double SGPlayerAudioLatency(void);

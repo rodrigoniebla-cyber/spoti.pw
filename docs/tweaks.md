@@ -210,7 +210,19 @@ Shared:
                   slider folds away and Apple's varispeed takes the unit's place: the song resampled like a record, no
                   time stretch to smear it. The block goes into Spotify's own context menu sheet
                   and is drawn from its own measures, not the Kit's, so it sits there under either look. Tested on the
-                  Mac against harness/pitch/ and in the simulator against harness/speed/ and harness/menu/
+                  Mac against harness/pitch/ and in the simulator against harness/speed/ and harness/menu/.
+                  Presets (SpeedPitchPresets.m, Mod Settings > Player > Speed and pitch presets, SpeedPitchPresetsPage.m,
+                  and a Preset line first in the panel): a name for a speed, a pitch and whether pitch follows speed, up to 50,
+                  stored as property lists under spotifyglass.speedPitch.presets. SGPlayerApplySpeedPitch sets all three at
+                  once and keeps them until Spotify's output has started when they come in before a song plays. Siri and
+                  Shortcuts are App Intents (SpeedPitchIntents.swift: the preset as an App Entity with a string query,
+                  Use speed and pitch preset, Set speed and pitch, Reset speed and pitch, and App Shortcuts with the phrases
+                  "Use <preset> in <app>" and so on): scripts/build-extension.sh hands the file to the App Intents
+                  metadata processor as the module the tweak compiles in, and scripts/merge-appintents.py adds its
+                  actions, entity, query and App Shortcuts to Spotify's own Metadata.appintents (the shortcuts are left out
+                  if Spotify's file already has some). The intent runs in Spotify's process, in the background when it is
+                  not open, and posts a notification the tweak acts on (SpeedPitchIntents.x, observers put up as the
+                  tweak loads); Siri is told the presets again, through SGSpeedPitchShortcutsBridge, when they change
     AudioEffects/ the audio effects on Spotify's sound (AudioEffects.h has the keys and the page's calls): Audio/SGAudioPipeline's
                   ordered output processor runs each finished buffer through the mod's own engine, re-blocked to 1024 frames one block late,
                   in place (AudioEffects.x, SGDSPEngine.m). The buffers are in the unit's output format, the

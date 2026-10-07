@@ -14,7 +14,7 @@ on:
         default: ""
         type: string
       disable:
-        description: "Parts of the mod to leave out, comma separated (Core/SGPrefs.h): liveactivity, lockscreen, syshaptics, stats, gemini, visualizer, sing, headgestures, glow, plist, extpatch. For finding which part a problem comes from"
+        description: "Parts of the mod to leave out, comma separated (Core/SGPrefs.h): liveactivity, lockscreen, syshaptics, stats, gemini, visualizer, sing, headgestures, glow, plist, extpatch, intents. For finding which part a problem comes from"
         required: false
         default: ""
         type: string
