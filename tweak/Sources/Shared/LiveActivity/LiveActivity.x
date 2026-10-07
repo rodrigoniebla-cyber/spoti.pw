@@ -172,7 +172,7 @@ static NSInteger coverTint(void) {
 // small picture carried in the state for when it may not; with them, the cover's colours for the bars. Read
 // once per track, off the main thread, from the artwork Spotify hands the system's now playing, as coverTint.
 static const CGFloat kCoverSide = 240, kThumbnailSide = 40;
-static const NSUInteger kLiveBands = 24;
+enum { kLiveBands = 24 };
 static NSString *sg_coverTrack, *sg_coverGroup, *sg_coverKey;
 static NSData *sg_coverThumbnail;
 static NSArray<NSNumber *> *sg_barColours;
