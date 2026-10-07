@@ -8,12 +8,21 @@
 
 NSNotificationName const SGVisualizerSettingsDidChangeNotification = @"spotifyglass.visualizerChanged";
 
-static NSArray<NSNumber *> *counts(void) { return @[@48, @64, @96, @128]; }
+// Appended to, never reordered: the stored value is an index.
+static NSArray<NSNumber *> *counts(void) { return @[@48, @64, @96, @128, @256, @512, @1024]; }
 
 NSInteger SGVisualizerBarCount(void) {
     NSArray<NSNumber *> *list = counts();
     NSInteger index = SGInt(SGKeyVisualizerBars, 1);
     return list[(NSUInteger)MAX(0, MIN((NSInteger)list.count - 1, index))].integerValue;
+}
+
+CGFloat SGVisualizerWidthFactor(void) {
+    switch (SGInt(SGKeyVisualizerWidth, SGVisualizerWidthNormal)) {
+        case SGVisualizerWidthThin: return 0.6;
+        case SGVisualizerWidthThick: return 1.4;
+        default: return 1;
+    }
 }
 
 static void changed(void) {
@@ -33,15 +42,21 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     follows.choiceNotes = @[@"Every band at its level", @"The drums jump out of the rest", @"The low end, all the way round"];
     follows.chosen = ^(NSInteger index) { changed(); };
     follows.visible = own;
-    SGModRow *bars = SGChoiceRow(@"Bars", nil, SGKeyVisualizerBars, @[@"48", @"64", @"96", @"128"], 1);
+    SGModRow *bars = SGChoiceRow(@"Bars", nil, SGKeyVisualizerBars, @[@"48", @"64", @"96", @"128", @"256", @"512", @"1024"], 1);
+    bars.choiceNotes = @[@"Chunky", @"The default", @"Detailed", @"Dense", @"Fine", @"Very fine", @"A smooth circle"];
+    bars.choiceFooter = @"From 256 on the bars are read between the sound's bins and smoothed into one another, so the ring turns into a curve. "
+                         "Past 256 the lock screen's frames and the ring cost more to draw.";
     bars.chosen = ^(NSInteger index) { changed(); };
+    SGModRow *width = SGChoiceRow(@"Bar width", nil, SGKeyVisualizerWidth, @[@"Thin", @"Normal", @"Thick"], SGVisualizerWidthNormal);
+    width.chosen = ^(NSInteger index) { changed(); };
     SGModRow *style = SGChoiceRow(@"Style", nil, SGKeyVisualizerStyle, @[@"Bars", @"Wave", @"Dots"], SGVisualizerStyleBars);
     style.chosen = ^(NSInteger index) { changed(); };
-    SGModRow *color = SGChoiceRow(@"Colour", nil, SGKeyVisualizerColor, @[@"Accent", @"White", @"Spectrum"], SGVisualizerColorAccent);
+    SGModRow *color = SGChoiceRow(@"Colour", nil, SGKeyVisualizerColor, @[@"Accent", @"White", @"Spectrum", @"Cover gradient"], SGVisualizerColorAccent);
+    color.choiceNotes = @[@"The look's accent colour", @"Plain white", @"Every hue, round the ring", @"A gradient of the cover's own colours, changing with each song"];
     color.chosen = ^(NSInteger index) { changed(); };
     SGModRow *mirror = SGSwitchRow(@"Mirror", @"Each side the other's reflection", SGKeyVisualizerMirror);
     mirror.changed = ^(BOOL on) { changed(); };
-    NSArray<SGModRow *> *rows = @[likeHaptics, strength, follows, bars, style, color, mirror];
+    NSArray<SGModRow *> *rows = @[likeHaptics, strength, follows, bars, width, style, color, mirror];
     if (waitsOnKey) for (SGModRow *row in rows) SGWaitsOn(row, waitsOnKey, NO);
     return rows;
 }

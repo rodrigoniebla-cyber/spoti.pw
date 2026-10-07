@@ -1,0 +1,21 @@
+// The colours of the playing cover, for the visualizer's Cover gradient colour (Visualizer.h): four colours
+// made by SGPalette.m's vote over the picture, in a ring order, and the gradient stops they make round the
+// ring (the ring in the player draws them as a conic gradient, the lock screen's frame samples the same).
+#import <UIKit/UIKit.h>
+
+// The colours of `image`, SGCoverPaletteColors of them; nil when it has no bitmap to read. Any thread.
+extern const NSInteger SGCoverPaletteColors;
+NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image);
+
+// The playing track's cover colours, read from the artwork Spotify hands the system's now playing, off the
+// main thread and once per track (Spotify's artwork handler can wait on the main thread, so it is never
+// called there). nil until the first is read, and the last track's until the next is. Main thread.
+NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void);
+// Posted on the main queue when a track's colours have been read.
+extern NSNotificationName const SGCoverPaletteDidChangeNotification;
+
+// The stops of a gradient round a ring through `palette`: first to last and back to the first, or, mirrored,
+// first to last and back down the other side, so the ring's two halves match. Both ends are the same colour.
+NSArray<UIColor *> *SGCoverGradientStops(NSArray<UIColor *> *palette, BOOL mirror);
+// The colour of those stops `t` (0...1) of the way round.
+UIColor *SGCoverGradientColor(NSArray<UIColor *> *stops, CGFloat t);

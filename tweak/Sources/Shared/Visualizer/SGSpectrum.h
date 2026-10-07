@@ -8,10 +8,12 @@
 //
 // SGSpectrumAnalyzer turns the newest `size` samples of a window into `count` bars, each 0...1: 1024 of them
 // (23 ms at 44.1 kHz, so a beat shows as it lands) and the whole 2048 for Bass, which needs the finer bins
-// low down; a Hann window, a radix-2 FFT, the bins
+// low down, and for more than 256 bars, which want them everywhere; a Hann window, a radix-2 FFT, the bins
 // summed into bands spaced evenly on a log scale over what is followed, each band's level in decibels
 // against the loudest the music has been lately (falling slowly, so a quiet song still moves), then the
-// strength, and a fast rise and a slower fall. Follows, as Music Haptics has it (Shared/Haptics):
+// strength, and a fast rise and a slower fall. Up to 128 bars each takes whole bins; past that there are more
+// bars than bins down low, so each reads the spectrum at its own place between two bins and a bar is
+// smoothed with its neighbours, which is what makes 1024 of them a smooth circle rather than steps. Follows, as Music Haptics has it (Shared/Haptics):
 //     Everything  40 Hz to 14 kHz, every band at its level
 //     Beat        the same bands, each lifted by how fast it just rose, so the drums jump out
 //     Bass        25 Hz to 250 Hz across the whole ring
@@ -23,7 +25,8 @@
 enum {
     SGSpectrumWindow = 2048,
     SGSpectrumRingSize = 16384,   // a power of two, several windows at 48 kHz
-    SGSpectrumMaxBands = 128,
+    SGSpectrumMaxBands = 1024,
+    SGSpectrumCoarseMost = 128,   // up to this many bars each takes whole bins
 };
 
 typedef enum { SGSpectrumEverything = 0, SGSpectrumBeat, SGSpectrumBass } SGSpectrumFollows;
@@ -46,6 +49,8 @@ typedef struct {
     float window[SGSpectrumWindow];   // the Hann window
     float real[SGSpectrumWindow], imaginary[SGSpectrumWindow];
     int first[SGSpectrumMaxBands + 1];   // each band's first bin, and the end of the last
+    int fine;                            // more bars than SGSpectrumCoarseMost: read between bins, smoothed
+    float edge[SGSpectrumMaxBands + 1];  // fine: each band's edges as a place between bins
     float level[SGSpectrumMaxBands];     // the band's last level, 0...1, before the strength
     float slow[SGSpectrumMaxBands];      // its slow average, which Beat measures a rise against
     float shown[SGSpectrumMaxBands];     // what the bars show, smoothed

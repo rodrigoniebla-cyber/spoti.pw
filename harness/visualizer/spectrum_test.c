@@ -114,6 +114,41 @@ int main(void) {
         for (int f = 0; f < 120; f++) SGSpectrumDecay(&analyzer, 1 / 60.0f, bars);
         assert(sum(0, 64) < 0.01f);
     }
+    // A thousand and twenty four bars: a smooth curve, a tone's peak where it belongs, nothing off the ends.
+    int counts[] = {200, 512, 1024};
+    for (int c = 0; c < 3; c++) {
+        int n = counts[c];
+        for (int r = 0; r < 2; r++) {
+            double rate = rates[r];
+            SGSpectrumReset(&analyzer, n, rate, SGSpectrumEverything);
+            assert(analyzer.count == n && analyzer.fine);
+            frames(1000, 0.8, rate, 60, 1);
+            double expected = n * log(1000 / 40.0) / log(analyzer.highHz / 40.0);
+            int peak = loudestBar();
+            assert(fabs(peak - expected) <= n / 100.0 + 2);
+            assert(bars[peak] > 0.6f);
+            // The curve: no bar jumps from its neighbour by much, and the far bars are quiet.
+            float steepest = 0;
+            for (int b = 1; b < n; b++) steepest = fmaxf(steepest, fabsf(bars[b] - bars[b - 1]));
+            assert(steepest < 0.2f * 1024 / n + 0.06f);
+            assert(sum(0, n / 4) < 0.1f * n / 4 + 1);
+            assert(sum(n * 3 / 4, n) < 0.1f * n / 4 + 1);
+            // Bass across the whole ring, and Beat, still work and stay in 0...1.
+            SGSpectrumReset(&analyzer, n, rate, SGSpectrumBass);
+            frames(90, 0.8, rate, 60, 1);
+            for (int b = 0; b < n; b++) assert(isfinite(bars[b]) && bars[b] >= 0 && bars[b] <= 1);
+            assert(sum(0, n) > 0.5f * n * 0.2f);
+            SGSpectrumReset(&analyzer, n, rate, SGSpectrumBeat);
+            frames(0, 0, rate, 30, 1);
+            frames(200, 0.5, rate, 4, 1);
+            for (int b = 0; b < n; b++) assert(isfinite(bars[b]) && bars[b] >= 0 && bars[b] <= 1);
+            frames(0, 0, rate, 120, 1);
+            assert(sum(0, n) < 0.05f * n);
+        }
+    }
+    SGSpectrumReset(&analyzer, 5000, 44100, SGSpectrumEverything);
+    assert(analyzer.count == SGSpectrumMaxBands);
+
     // Bad input never makes a bar that is not a number.
     SGSpectrumReset(&analyzer, 3, NAN, SGSpectrumEverything);
     assert(analyzer.count == 8 && analyzer.sampleRate == 44100);

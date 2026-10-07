@@ -18,6 +18,7 @@
 #import "Shared/Sing/SGSingController.h"
 #import "Shared/Player/PlayerState.h"
 #import "Shared/Visualizer/Visualizer.h"
+#import "Shared/Visualizer/SGCoverPalette.h"
 
 // A tenth of a second: a new line is on the lock screen within that of being sung.
 static const NSTimeInterval kTick = 0.1;
@@ -134,6 +135,23 @@ static UIImage *coverFor(MPMediaItemArtwork *cover) {
         sg_cover = image;
     }
     return image;
+}
+
+// The cover's colours for the Cover gradient, worked out once per artwork object, on the frame queue.
+static __weak MPMediaItemArtwork *sg_paletteOf;
+static NSArray<UIColor *> *sg_paletteColors;
+
+static NSArray<UIColor *> *paletteFor(MPMediaItemArtwork *cover) {
+    if (!cover) return nil;
+    @synchronized (sg_artworkLock) {
+        if (cover == sg_paletteOf && sg_paletteColors) return sg_paletteColors;
+    }
+    NSArray<UIColor *> *colors = SGCoverPaletteOfImage(coverFor(cover));
+    @synchronized (sg_artworkLock) {
+        sg_paletteOf = cover;
+        sg_paletteColors = colors;
+    }
+    return colors;
 }
 
 static UIImage *backdropFor(MPMediaItemArtwork *cover) {
@@ -283,19 +301,22 @@ static void frameTick(void) {
     CFTimeInterval now = CACurrentMediaTime();
     float elapsed = sg_frameAt > 0 ? (float)(now - sg_frameAt) : 1 / 10.0f;
     sg_frameAt = now;
-    NSInteger bands = MIN(SGVisualizerBarCount(), (NSInteger)64);
+    // The frame draws a stroke a bar, so a ring of a thousand is drawn with half as many.
+    NSInteger bands = MIN(SGVisualizerBarCount(), (NSInteger)512);
     if (SGEnabled(SGKeyVisualizerMirror)) bands = MAX(8, bands / 2);
-    float bars[128];
+    float bars[512];
     SGVisualizerReadBars(bars, bands, elapsed);
     NSData *levels = [NSData dataWithBytes:bars length:sizeof(float) * (NSUInteger)bands];
     NSString *full = nil, *next = nil;
     if (sg_place != SGLockScreenLyricsArtist) lineFor(info, elapsedAt(info, reportedAt, CFAbsoluteTimeGetCurrent()), &full, &next);
     id cover = info[MPMediaItemPropertyArtwork];
     MPMediaItemArtwork *artwork = [cover isKindOfClass:MPMediaItemArtwork.class] ? cover : nil;
+    BOOL coloured = SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent) == SGVisualizerColorCover;
     sg_rendering = YES;
     dispatch_async(frameQueue(), ^{
         UIImage *frame = SGVisualizerDrawFrame(kArtworkSide, coverFor(artwork), backdropFor(artwork), levels.bytes, bands,
-                                               [UIColor colorWithRed:0.12 green:0.84 blue:0.38 alpha:1], full, next);
+                                               [UIColor colorWithRed:0.12 green:0.84 blue:0.38 alpha:1],
+                                               coloured ? paletteFor(artwork) : nil, full, next);
         dispatch_async(dispatch_get_main_queue(), ^{
             sg_rendering = NO;
             if (!sg_frameTimer || !frame) return;

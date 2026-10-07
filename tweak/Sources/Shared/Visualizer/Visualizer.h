@@ -17,7 +17,8 @@
 #define SGKeyVisualizerStrength @"spotifyglass.visualizer.strength"   // 20...200, 100 unset
 #define SGKeyVisualizerFollows @"spotifyglass.visualizer.follows"
 #define SGKeyVisualizerLikeHaptics @"spotifyglass.visualizer.likeHaptics"   // off until switched on
-#define SGKeyVisualizerBars @"spotifyglass.visualizer.bars"           // an index into the counts below
+#define SGKeyVisualizerBars @"spotifyglass.visualizer.bars"           // an index into the counts below: 48 to 1024
+#define SGKeyVisualizerWidth @"spotifyglass.visualizer.width"         // an SGVisualizerWidth
 #define SGKeyVisualizerStyle @"spotifyglass.visualizer.style"         // an SGVisualizerStyle
 #define SGKeyVisualizerColor @"spotifyglass.visualizer.color"         // an SGVisualizerColor
 #define SGKeyVisualizerMirror @"spotifyglass.visualizer.mirror"       // on until switched off
@@ -32,12 +33,22 @@ typedef NS_ENUM(NSInteger, SGVisualizerColor) {
     SGVisualizerColorAccent = 0,   // the look's accent, or what the host hands the view
     SGVisualizerColorWhite,
     SGVisualizerColorSpectrum,     // a hue all the way round
+    SGVisualizerColorCover,        // a gradient through the playing cover's main colours (SGCoverPalette.h)
+};
+
+typedef NS_ENUM(NSInteger, SGVisualizerWidth) {
+    SGVisualizerWidthThin = 0,
+    SGVisualizerWidthNormal,
+    SGVisualizerWidthThick,
 };
 
 // Posted on the main queue when a setting changes, so every ring takes it at once.
 extern NSNotificationName const SGVisualizerSettingsDidChangeNotification;
 
 NSInteger SGVisualizerBarCount(void);
+// How wide a bar is drawn against the room it has: 0.6, 1 (unset) or 1.4 times its share, never more than the
+// room between bars, and never under what a 1024 bar ring needs to read as a line.
+CGFloat SGVisualizerWidthFactor(void);
 
 // VisualizerTap.x: the tap reads the sound only while at least one ring is on screen, or the lock screen
 // draws frames. Main thread.
@@ -54,9 +65,10 @@ NSInteger SGLockScreenVisualizerFramesPerSecond(void);   // 6, 10 (unset) or 15
 
 // SGVisualizerFrame.m: one picture of the ring, `side` points square at scale 1, in the ring's own style,
 // colour and mirror. Any thread; `cover` and `backdrop` may be nil, and `line`/`next` are drawn under it.
+// `palette` is the cover's colours (SGCoverPalette.h) for the Cover gradient colour, nil for the accent.
 UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, const float *bars, NSInteger bands,
-                               UIColor *accent, NSString *line, NSString *next);
-// The newest bars, `count` of them, for a frame `elapsed` seconds after the last; NO when there is no sound
+                               UIColor *accent, NSArray<UIColor *> *palette, NSString *line, NSString *next);
+// The newest bars, `count` of them (up to SGSpectrumMaxBands), for a frame `elapsed` seconds after the last; NO when there is no sound
 // to read yet (the bars then fall, which this does too).
 BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed);
 

@@ -36,14 +36,25 @@ void SGSpectrumReset(SGSpectrumAnalyzer *a, int count, double sampleRate, SGSpec
     a->count = count < 8 ? 8 : count > SGSpectrumMaxBands ? SGSpectrumMaxBands : count;
     a->sampleRate = isfinite(sampleRate) && sampleRate >= 8000 ? sampleRate : 44100;
     a->follows = follows;
-    a->size = follows == SGSpectrumBass ? SGSpectrumWindow : kShortWindow;
+    a->fine = a->count > SGSpectrumCoarseMost;
+    a->size = follows == SGSpectrumBass || a->count > 256 ? SGSpectrumWindow : kShortWindow;
     a->lowHz = follows == SGSpectrumBass ? 25 : 40;
     a->highHz = follows == SGSpectrumBass ? 250 : 14000;
     if (a->highHz > a->sampleRate * 0.45) a->highHz = (float)(a->sampleRate * 0.45);
     a->peakDb = kPeakFloorDb + kRangeDb;
     for (int i = 0; i < a->size; i++) a->window[i] = 0.5f - 0.5f * cosf(2 * kPi * i / a->size);
-    // Log spaced edges, each band at least one bin and after the last one's.
     float binHz = (float)(a->sampleRate / a->size);
+    if (a->fine) {
+        // Log spaced edges as places between bins; a band narrower than a bin reads between two.
+        float top = (float)(a->size / 2);
+        for (int b = 0; b <= a->count; b++) {
+            float place = a->lowHz * powf(a->highHz / a->lowHz, (float)b / a->count) / binHz;
+            a->edge[b] = place < 1 ? 1 : place > top ? top : place;
+            a->first[b] = (int)floorf(a->edge[b]);
+        }
+        return;
+    }
+    // Log spaced edges, each band at least one bin and after the last one's.
     int previous = 0;
     for (int b = 0; b <= a->count; b++) {
         float hz = a->lowHz * powf(a->highHz / a->lowHz, (float)b / a->count);
@@ -102,11 +113,22 @@ void SGSpectrumProcess(SGSpectrumAnalyzer *a, const float *window, float elapsed
     fft(a->real, a->imaginary, size);
     float loudest = -200;
     float db[SGSpectrumMaxBands];
+    int last = size / 2;
     for (int b = 0; b < a->count; b++) {
         double energy = 0;
-        int from = a->first[b], to = a->first[b + 1] > from ? a->first[b + 1] : from + 1;
-        for (int k = from; k < to && k <= size / 2; k++) energy += a->real[k] * a->real[k] + a->imaginary[k] * a->imaginary[k];
-        energy /= (to - from);
+        if (a->fine && a->edge[b + 1] - a->edge[b] < 1.5f) {
+            // Narrower than a bin or two: the power at the band's middle, between the two bins either side of it.
+            float place = 0.5f * (a->edge[b] + a->edge[b + 1]);
+            int k = (int)floorf(place), next = k + 1 > last ? last : k + 1;
+            float share = place - (float)k;
+            double here = a->real[k] * a->real[k] + a->imaginary[k] * a->imaginary[k];
+            double after = a->real[next] * a->real[next] + a->imaginary[next] * a->imaginary[next];
+            energy = here + (after - here) * share;
+        } else {
+            int from = a->first[b], to = a->first[b + 1] > from ? a->first[b + 1] : from + 1;
+            for (int k = from; k < to && k <= last; k++) energy += a->real[k] * a->real[k] + a->imaginary[k] * a->imaginary[k];
+            energy /= (to - from);
+        }
         // Scaled so a full scale sine reads near 0 dB.
         float level = 10 * log10f((float)(energy * 4 / ((double)size * size)) + 1e-12f);
         db[b] = level;
@@ -115,10 +137,23 @@ void SGSpectrumProcess(SGSpectrumAnalyzer *a, const float *window, float elapsed
     a->peakDb -= kPeakFallDbPerSecond * elapsed;
     if (loudest > a->peakDb) a->peakDb = loudest;
     if (a->peakDb < kPeakFloorDb + kRangeDb) a->peakDb = kPeakFloorDb + kRangeDb;
+    float levels[SGSpectrumMaxBands];
     for (int b = 0; b < a->count; b++) {
         float level = (db[b] - (a->peakDb - kRangeDb)) / kRangeDb;
         level = level < 0 ? 0 : level > 1 ? 1 : level;
-        level *= level;   // quiet bands stay low, loud ones stand out
+        levels[b] = level * level;   // quiet bands stay low, loud ones stand out
+    }
+    if (a->fine) {
+        // Each bar with its neighbours', the ends kept, so a ring of a thousand is a curve and not steps.
+        float before = levels[0];
+        for (int b = 0; b < a->count; b++) {
+            float here = levels[b], after = levels[b + 1 < a->count ? b + 1 : b];
+            levels[b] = 0.25f * before + 0.5f * here + 0.25f * after;
+            before = here;
+        }
+    }
+    for (int b = 0; b < a->count; b++) {
+        float level = levels[b];
         float value = level;
         if (a->follows == SGSpectrumBeat) {
             float rise = level - a->slow[b];

@@ -1,8 +1,9 @@
 // One still of the visualizer (Visualizer.h), for the lock screen's artwork: the cover blurred behind,
 // the cover itself as a circle in the middle and the bars round it, as the ring in the player draws them
-// (SGVisualizerView.m), in its style, colour and mirror. With a line to show, the ring moves up and the
+// (SGVisualizerView.m), in its style, colour (the cover's gradient included) width and mirror. With a line to show, the ring moves up and the
 // line and the next one sit under it. Drawn with an image renderer, which any thread may use.
 #import "Core/SGCore.h"
+#import "SGCoverPalette.h"
 #import "Visualizer.h"
 
 static void drawText(NSString *text, UIFont *font, UIColor *color, CGRect box) {
@@ -16,10 +17,13 @@ static void drawText(NSString *text, UIFont *font, UIColor *color, CGRect box) {
 }
 
 UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, const float *bars, NSInteger bands,
-                               UIColor *accent, NSString *line, NSString *next) {
+                               UIColor *accent, NSArray<UIColor *> *palette, NSString *line, NSString *next) {
     SGVisualizerStyle style = (SGVisualizerStyle)SGInt(SGKeyVisualizerStyle, SGVisualizerStyleBars);
     SGVisualizerColor colour = (SGVisualizerColor)SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent);
     BOOL mirror = SGEnabled(SGKeyVisualizerMirror);
+    CGFloat widthFactor = SGVisualizerWidthFactor();
+    NSArray<UIColor *> *stops = colour == SGVisualizerColorCover ? SGCoverGradientStops(palette, mirror) : nil;
+    BOOL gradient = colour == SGVisualizerColorSpectrum || stops.count > 0;
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
     format.scale = 1;
     format.opaque = YES;
@@ -61,11 +65,19 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
         NSInteger count = mirror ? bands * 2 : bands;
         if (count > 0 && reach > 0 && bars) {
             CGFloat step = 2 * M_PI / count;
-            CGFloat width = MAX(2, MIN(side * 0.014, inner * step * 0.55));
+            // As the ring in the player works its widths out (SGVisualizerView.m): a share of the room, never
+            // more than the room, and a hairline at the least.
+            CGFloat room = inner * step;
+            CGFloat width = MIN(side * 0.014 * widthFactor, room * 0.55 * widthFactor);
+            width = MIN(width, MAX(1, room * 0.95));
+            width = MAX(width, MIN(2, room * 1.1));
             UIColor *plain = colour == SGVisualizerColorWhite ? UIColor.whiteColor : (accent ?: UIColor.whiteColor);
             CGContextSetLineCap(context, kCGLineCapRound);
             CGContextSetLineJoin(context, kCGLineJoinRound);
-            UIBezierPath *wave = style == SGVisualizerStyleWave ? [UIBezierPath bezierPath] : nil;
+            CGPoint tips[count];
+            if (!gradient) [plain setStroke];
+            if (!gradient) [plain setFill];
+            CGContextSetLineWidth(context, width);
             for (NSInteger i = 0; i < count; i++) {
                 NSInteger band = mirror ? (i < bands ? i : count - 1 - i) : i;
                 CGFloat value = MAX(0, MIN(1, bars[band]));
@@ -74,32 +86,41 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
                 CGFloat out = inner + MAX(width * 0.5, value * reach);
                 CGPoint from = CGPointMake(centre.x + dx * inner, centre.y + dy * inner);
                 CGPoint to = CGPointMake(centre.x + dx * out, centre.y + dy * out);
-                UIColor *color = colour == SGVisualizerColorSpectrum
-                    ? [UIColor colorWithHue:(CGFloat)i / count saturation:0.75 brightness:1 alpha:1] : plain;
+                tips[i] = to;
+                // One colour is one path, stroked once below; a gradient is a stroke a bar.
+                UIColor *color = nil;
+                if (gradient) {
+                    color = stops ? SGCoverGradientColor(stops, (CGFloat)(i + 0.5) / count)
+                                  : [UIColor colorWithHue:(CGFloat)i / count saturation:0.75 brightness:1 alpha:1];
+                }
                 switch (style) {
                     case SGVisualizerStyleBars:
-                        [color setStroke];
-                        CGContextSetLineWidth(context, width);
+                        if (color) [color setStroke];
                         CGContextMoveToPoint(context, from.x, from.y);
                         CGContextAddLineToPoint(context, to.x, to.y);
-                        CGContextStrokePath(context);
+                        if (color) CGContextStrokePath(context);
                         break;
                     case SGVisualizerStyleDots:
-                        [color setFill];
+                        if (color) [color setFill];
                         CGContextFillEllipseInRect(context, CGRectMake(to.x - width * 0.6, to.y - width * 0.6, width * 1.2, width * 1.2));
                         break;
                     case SGVisualizerStyleWave:
-                        if (i == 0) [wave moveToPoint:to];
-                        else [wave addLineToPoint:to];
                         break;
                 }
             }
-            if (wave) {
-                [wave closePath];
-                wave.lineWidth = MAX(2, side * 0.006);
-                wave.lineJoinStyle = kCGLineJoinRound;
-                [(colour == SGVisualizerColorSpectrum ? UIColor.whiteColor : plain) setStroke];
-                [wave stroke];
+            if (style == SGVisualizerStyleBars && !gradient) CGContextStrokePath(context);
+            if (style == SGVisualizerStyleWave) {
+                CGContextSetLineWidth(context, MAX(2, side * 0.006 * MAX(1, widthFactor)));
+                for (NSInteger i = 0; i < count; i++) {
+                    CGPoint a = tips[i], b = tips[(i + 1) % count];
+                    UIColor *color = plain;
+                    if (stops) color = SGCoverGradientColor(stops, (CGFloat)(i + 0.5) / count);
+                    else if (gradient) color = [UIColor colorWithHue:(CGFloat)i / count saturation:0.75 brightness:1 alpha:1];
+                    [color setStroke];
+                    CGContextMoveToPoint(context, a.x, a.y);
+                    CGContextAddLineToPoint(context, b.x, b.y);
+                    CGContextStrokePath(context);
+                }
             }
         }
 
