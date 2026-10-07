@@ -1,6 +1,7 @@
-// The colours of the playing cover, for the visualizer's Cover gradient colour (Visualizer.h): four colours
-// made by SGPalette.m's vote over the picture, in a ring order, and the gradient stops they make round the
-// ring (the ring in the player draws them as a conic gradient, the lock screen's frame samples the same).
+// The colours of the playing cover, for the visualizer's Cover gradient colour (Visualizer.h): five colours
+// read off the blurred picture by SGPalette.m, its centre and its four quarters, and the gradient stops they
+// make round the ring (the ring in the player draws them as a conic gradient, the lock screen's frame samples
+// the same).
 #import <UIKit/UIKit.h>
 
 // The colours of `image`, SGCoverPaletteColors of them; nil when it has no bitmap to read. Any thread.

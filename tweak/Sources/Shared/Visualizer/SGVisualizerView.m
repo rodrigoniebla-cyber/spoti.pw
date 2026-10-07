@@ -273,8 +273,10 @@ static BOOL onScreen(UIView *view) {
     if (_frames++ % 30 == 0) {
         _covered = !onScreen(self);
         // A new track's cover is noticed here: the read is kicked off and the notification brings it in. The
-        // picture on screen is read when there is one, the now playing artwork otherwise.
-        if (_color == SGVisualizerColorCover) {
+        // picture on screen is read when there is one, the now playing artwork otherwise. Only the ring that
+        // shows hands its cover over: the player keeps a ring round the songs either side too, hidden, and
+        // theirs are other songs' covers.
+        if (_color == SGVisualizerColorCover && !_covered) {
             __block UIImageView *largest = nil;
             UIView *cover = self.coverView;
             if (cover) SGForEachView(cover, ^(UIView *view) {

@@ -1,4 +1,4 @@
-// SGCoverPalette.h says what this does. The vote is SGPalette.m's; this reads the picture into pixels for it.
+// SGCoverPalette.h says what this does. The sampling is SGPalette.m's; this reads the picture into pixels for it.
 #import <MediaPlayer/MediaPlayer.h>
 #import "Core/SGCore.h"
 #import "Shared/Lyrics/Lyrics.h"
@@ -6,7 +6,7 @@
 #import "SGCoverPalette.h"
 #import "Visualizer.h"
 
-const NSInteger SGCoverPaletteColors = 4;
+const NSInteger SGCoverPaletteColors = 5;
 NSNotificationName const SGCoverPaletteDidChangeNotification = @"spotifyglass.coverPaletteChanged";
 
 // Enough pixels for a cover's colours; more would only cost.
