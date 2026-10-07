@@ -9,6 +9,9 @@ static const float kRangeDb = 52, kPeakFallDbPerSecond = 6, kPeakFloorDb = -70;
 // How fast the bars rise and fall: a share of the way per 60th of a second. Quick both ways, so a bar is
 // where the sound is within a frame or two and drops away before the next hit.
 static const float kRise = 0.8f, kFall = 0.3f;
+const float SGSpectrumDefaultRise = 0.8f, SGSpectrumDefaultFall = 0.3f;   // kRise and kFall
+// With a bass share: the bottom of what is shown, and where its share ends.
+static const float kBassLowHz = 20, kBassSplitHz = 100;
 static const int kShortWindow = 1024;
 // Beat: how slowly a band's average follows it, and how much a rise over that average lifts the bar.
 static const float kSlowShare = 0.08f, kBeatLift = 2.6f, kBeatBase = 0.35f;
@@ -32,13 +35,41 @@ bool SGSpectrumRingRead(SGSpectrumRing *ring, float *window) {
 }
 
 void SGSpectrumReset(SGSpectrumAnalyzer *a, int count, double sampleRate, SGSpectrumFollows follows) {
+    SGSpectrumResetShaped(a, count, sampleRate, follows, 0);
+}
+
+static float clampShare(float share, float low, float high) {
+    return !(share >= low) ? low : share > high ? high : share;
+}
+
+void SGSpectrumSetResponse(SGSpectrumAnalyzer *a, float rise, float fall) {
+    a->rise = clampShare(rise, 0.02f, 1);
+    a->fall = clampShare(fall, 0.02f, 1);
+}
+
+// Where band edge `b` of `count` sits, in Hz: one log scale from low to high, or with a bass share, 20 to 100 Hz
+// over that share and 100 Hz to the top over the rest.
+static float edgeHz(const SGSpectrumAnalyzer *a, int b) {
+    float f = (float)b / a->count;
+    if (a->bassShare <= 0) return a->lowHz * powf(a->highHz / a->lowHz, f);
+    if (f <= a->bassShare) return kBassLowHz * powf(kBassSplitHz / kBassLowHz, f / a->bassShare);
+    return kBassSplitHz * powf(a->highHz / kBassSplitHz, (f - a->bassShare) / (1 - a->bassShare));
+}
+
+void SGSpectrumResetShaped(SGSpectrumAnalyzer *a, int count, double sampleRate, SGSpectrumFollows follows, float bassShare) {
+    float rise = a->rise > 0 ? a->rise : kRise, fall = a->fall > 0 ? a->fall : kFall;
     memset(a, 0, sizeof *a);
+    a->rise = rise;
+    a->fall = fall;
     a->count = count < 8 ? 8 : count > SGSpectrumMaxBands ? SGSpectrumMaxBands : count;
     a->sampleRate = isfinite(sampleRate) && sampleRate >= 8000 ? sampleRate : 44100;
     a->follows = follows;
-    a->fine = a->count > SGSpectrumCoarseMost;
-    a->size = follows == SGSpectrumBass || a->count > 256 ? SGSpectrumWindow : kShortWindow;
-    a->lowHz = follows == SGSpectrumBass ? 25 : 40;
+    // Bass is all bass already; elsewhere a share of the ring goes to 20 to 100 Hz, which only the longer
+    // window has bins enough for, read between them.
+    a->bassShare = follows == SGSpectrumBass || !(bassShare > 0) ? 0 : bassShare > 0.5f ? 0.5f : bassShare;
+    a->fine = a->count > SGSpectrumCoarseMost || a->bassShare > 0;
+    a->size = follows == SGSpectrumBass || a->count > 256 || a->bassShare > 0 ? SGSpectrumWindow : kShortWindow;
+    a->lowHz = follows == SGSpectrumBass ? 25 : a->bassShare > 0 ? kBassLowHz : 40;
     a->highHz = follows == SGSpectrumBass ? 250 : 14000;
     if (a->highHz > a->sampleRate * 0.45) a->highHz = (float)(a->sampleRate * 0.45);
     a->peakDb = kPeakFloorDb + kRangeDb;
@@ -48,7 +79,7 @@ void SGSpectrumReset(SGSpectrumAnalyzer *a, int count, double sampleRate, SGSpec
         // Log spaced edges as places between bins; a band narrower than a bin reads between two.
         float top = (float)(a->size / 2);
         for (int b = 0; b <= a->count; b++) {
-            float place = a->lowHz * powf(a->highHz / a->lowHz, (float)b / a->count) / binHz;
+            float place = edgeHz(a, b) / binHz;
             a->edge[b] = place < 1 ? 1 : place > top ? top : place;
             a->first[b] = (int)floorf(a->edge[b]);
         }
@@ -163,7 +194,7 @@ void SGSpectrumProcess(SGSpectrumAnalyzer *a, const float *window, float elapsed
         a->level[b] = level;
         value *= strength;
         if (value > 1) value = 1;
-        a->shown[b] = ease(a->shown[b], value, value > a->shown[b] ? kRise : kFall, frames);
+        a->shown[b] = ease(a->shown[b], value, value > a->shown[b] ? a->rise : a->fall, frames);
         bars[b] = a->shown[b];
     }
 }
@@ -171,7 +202,7 @@ void SGSpectrumProcess(SGSpectrumAnalyzer *a, const float *window, float elapsed
 void SGSpectrumDecay(SGSpectrumAnalyzer *a, float elapsed, float *bars) {
     if (!(elapsed > 0) || elapsed > 0.25f) elapsed = 1 / 60.0f;
     for (int b = 0; b < a->count; b++) {
-        a->shown[b] = ease(a->shown[b], 0, kFall, elapsed * 60);
+        a->shown[b] = ease(a->shown[b], 0, a->fall, elapsed * 60);
         a->slow[b] = ease(a->slow[b], 0, kSlowShare, elapsed * 60);
         bars[b] = a->shown[b];
     }

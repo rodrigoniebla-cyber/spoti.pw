@@ -146,6 +146,45 @@ int main(void) {
             assert(sum(0, n) < 0.05f * n);
         }
     }
+    // A fifth of the ring for 20 to 100 Hz: a 50 Hz tone peaks inside it, 1 kHz where the rest's log scale puts
+    // it, and Bass ignores the share.
+    int shaped[] = {64, 128, 1024};
+    for (int c = 0; c < 3; c++) {
+        int n = shaped[c];
+        for (int r = 0; r < 2; r++) {
+            double rate = rates[r];
+            SGSpectrumResetShaped(&analyzer, n, rate, SGSpectrumEverything, 0.2f);
+            assert(analyzer.fine && analyzer.lowHz == 20 && analyzer.bassShare == 0.2f);
+            frames(50, 0.8, rate, 60, 1);
+            int low = loudestBar();
+            double lowWanted = n * 0.2 * log(50 / 20.0) / log(5.0);
+            assert(low < n / 5 && fabs(low - lowWanted) <= n / 20.0 + 2);
+            assert(sum(n / 2, n) < 0.1f * n / 2 + 1);
+            frames(1000, 0.8, rate, 60, 1);
+            int mid = loudestBar();
+            double midWanted = n * (0.2 + 0.8 * log(10.0) / log(analyzer.highHz / 100.0));
+            assert(fabs(mid - midWanted) <= n / 50.0 + 2);
+            for (int b = 0; b < n; b++) assert(isfinite(bars[b]) && bars[b] >= 0 && bars[b] <= 1);
+        }
+    }
+    SGSpectrumResetShaped(&analyzer, 64, 44100, SGSpectrumBass, 0.2f);
+    assert(analyzer.bassShare == 0 && analyzer.lowHz == 25);
+
+    // Response: a slow fall leaves more of a stopped tone up than the quick one does, and a reset keeps it.
+    SGSpectrumReset(&analyzer, 64, 44100, SGSpectrumEverything);
+    SGSpectrumSetResponse(&analyzer, 0.8f, 0.5f);
+    frames(1000, 0.8, 44100, 60, 1);
+    frames(0, 0, 44100, 6, 1);
+    float quick = bars[barFor(1000)];
+    SGSpectrumSetResponse(&analyzer, 0.8f, 0.1f);
+    SGSpectrumReset(&analyzer, 64, 44100, SGSpectrumEverything);
+    assert(analyzer.fall == 0.1f);
+    frames(1000, 0.8, 44100, 60, 1);
+    frames(0, 0, 44100, 6, 1);
+    float slow = bars[barFor(1000)];
+    assert(slow > quick + 0.2f);
+    SGSpectrumSetResponse(&analyzer, SGSpectrumDefaultRise, SGSpectrumDefaultFall);
+
     SGSpectrumReset(&analyzer, 5000, 44100, SGSpectrumEverything);
     assert(analyzer.count == SGSpectrumMaxBands);
 
@@ -159,6 +198,6 @@ int main(void) {
     SGSpectrumProcess(&analyzer, window_, NAN, NAN, bars);
     for (int b = 0; b < analyzer.count; b++) assert(isfinite(bars[b]) && bars[b] >= 0 && bars[b] <= 1);
     SGSpectrumProcess(&analyzer, NULL, 1 / 60.0f, 1, bars);
-    puts("visualizer: ring, tones, bass, beat, strength, silence and bad input passed at 44.1 and 48 kHz");
+    puts("visualizer: ring, tones, bass, beat, strength, silence, 1024 bars, the bass fifth, response and bad input passed at 44.1 and 48 kHz");
     return 0;
 }

@@ -30,7 +30,11 @@ static void showing(NSInteger change) {
     SGVisualizerColor _color;
     BOOL _mirror, _counted, _covered;
     NSUInteger _frames;
-    CGFloat _widthFactor;
+    CGFloat _widthFactor, _heightFactor;
+    NSTimeInterval _rotation;
+    // Each band's cap, where Peaks has it: the highest the bar has been lately, falling back slowly.
+    BOOL _peaks;
+    float _peak[SGSpectrumMaxBands];
     // The bars' directions, made again when their number changes.
     float _cos[SGSpectrumMaxBands], _sin[SGSpectrumMaxBands];
     NSInteger _angles;
@@ -77,8 +81,33 @@ static BOOL onScreen(UIView *view) {
     _color = (SGVisualizerColor)SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent);
     _mirror = SGEnabled(SGKeyVisualizerMirror);
     _widthFactor = SGVisualizerWidthFactor();
+    _heightFactor = SGVisualizerHeightFactor();
+    _peaks = SGFlag(SGKeyVisualizerPeaks, NO);
+    _rotation = SGVisualizerRotationPeriod();
     memset(_bars, 0, sizeof _bars);
+    memset(_peak, 0, sizeof _peak);
     [self applyColor:NO];
+    [self applyRotation];
+}
+
+// Rotation turns the whole ring, gradient and all, on an animation of its own that the layer keeps; the
+// host's frame and the bars drawn each frame are untouched by it.
+- (void)applyRotation {
+    static NSString *const key = @"sg.ring.turn";
+    CABasicAnimation *existing = (CABasicAnimation *)[self.layer animationForKey:key];
+    if (_rotation <= 0 || UIAccessibilityIsReduceMotionEnabled()) {
+        if (existing) [self.layer removeAnimationForKey:key];
+        return;
+    }
+    if (existing && existing.duration == _rotation) return;
+    CABasicAnimation *turn = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
+    turn.fromValue = @0;
+    turn.toValue = @(2 * M_PI);
+    turn.duration = _rotation;
+    turn.repeatCount = HUGE_VALF;
+    turn.additive = YES;
+    turn.removedOnCompletion = NO;
+    [self.layer addAnimation:turn forKey:key];
 }
 
 // A new track's colours fade in rather than cut.
@@ -151,6 +180,7 @@ static BOOL onScreen(UIView *view) {
 
 - (void)didMoveToWindow {
     [super didMoveToWindow];
+    if (self.window) [self applyRotation];
     [self scheduleLink];
 }
 
@@ -198,6 +228,11 @@ static BOOL onScreen(UIView *view) {
     // A mirrored ring shows each band twice, so it reads half as many.
     NSInteger bands = _mirror ? MAX(8, _count / 2) : _count;
     SGVisualizerReadBars(_bars, bands, elapsed);
+    if (_peaks) {
+        // A cap falls a third of the way in a second, and is pushed up by its bar.
+        float drop = elapsed * 0.33f;
+        for (NSInteger b = 0; b < bands; b++) _peak[b] = MAX(_bars[b], _peak[b] - drop);
+    }
     [self drawBands:bands];
 }
 
@@ -206,9 +241,8 @@ static BOOL onScreen(UIView *view) {
     CGPoint centre = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
     CGFloat outer = MIN(bounds.size.width, bounds.size.height) / 2 - kOuterInset;
     CGFloat inner = MAX(4, MIN(self.innerRadius + kGap, outer - 8));
-    CGFloat reach = outer - inner;
     NSInteger count = _mirror ? bands * 2 : bands;
-    if (count <= 0 || reach <= 0) return;
+    if (count <= 0 || outer - inner <= 0) return;
     CGFloat step = 2 * M_PI / count;
     // A bar is a share of the room it has, never wider than that room, and at a thousand bars never thinner
     // than a hairline; the width choice is a bigger or smaller share.
@@ -216,6 +250,10 @@ static BOOL onScreen(UIView *view) {
     CGFloat width = MIN(8 * _widthFactor, room * 0.55 * _widthFactor);
     width = MIN(width, MAX(0.75, room * 0.95));
     width = MAX(width, MIN(1.5, room * 1.1));
+    // The caps want room of their own past the tallest bar.
+    BOOL caps = _peaks && _style == SGVisualizerStyleBars;
+    CGFloat reach = MAX(0, outer - inner - (caps ? width * 2.5 : 0)) * _heightFactor;
+    if (reach <= 0) return;
     if (count != _angles) {
         for (NSInteger i = 0; i < count; i++) {
             CGFloat angle = -M_PI_2 + (i + 0.5) * step;
@@ -235,6 +273,12 @@ static BOOL onScreen(UIView *view) {
             case SGVisualizerStyleBars:
                 [path moveToPoint:CGPointMake(centre.x + dx * inner, centre.y + dy * inner)];
                 [path addLineToPoint:CGPointMake(centre.x + dx * out, centre.y + dy * out)];
+                if (caps) {
+                    // A dot (a stroke of almost no length, its round caps making it round) a little past the peak.
+                    CGFloat cap = inner + MAX(width * 0.5, _peak[band] * reach) + width * 1.5;
+                    [path moveToPoint:CGPointMake(centre.x + dx * cap, centre.y + dy * cap)];
+                    [path addLineToPoint:CGPointMake(centre.x + dx * (cap + 0.01), centre.y + dy * (cap + 0.01))];
+                }
                 break;
             case SGVisualizerStyleWave:
                 if (i == 0) [path moveToPoint:CGPointMake(centre.x + dx * out, centre.y + dy * out)];

@@ -19,6 +19,17 @@
 #define SGKeyVisualizerLikeHaptics @"spotifyglass.visualizer.likeHaptics"   // off until switched on
 #define SGKeyVisualizerBars @"spotifyglass.visualizer.bars"           // an index into the counts below: 48 to 1024
 #define SGKeyVisualizerWidth @"spotifyglass.visualizer.width"         // an SGVisualizerWidth
+// How much of the ring the lowest notes get: an index into Even (one log scale, 40 Hz up), a fifth (unset), a
+// quarter and a third of the bars for 20 to 100 Hz, the rest log spaced from 100 Hz up. Bass is all bass anyway.
+#define SGKeyVisualizerBassShare @"spotifyglass.visualizer.bassShare"
+// How far out the bars reach, an index into short, medium and full (unset).
+#define SGKeyVisualizerHeight @"spotifyglass.visualizer.height"
+// How the bars move, an index into snappy, normal (unset) and smooth.
+#define SGKeyVisualizerResponse @"spotifyglass.visualizer.response"
+// A cap left at each bar's peak, falling slowly back to it (the ring in the player only). Off until switched on.
+#define SGKeyVisualizerPeaks @"spotifyglass.visualizer.peaks"
+// The ring turning, an index into off (unset), slow and fast (the ring in the player only).
+#define SGKeyVisualizerRotation @"spotifyglass.visualizer.rotation"
 #define SGKeyVisualizerStyle @"spotifyglass.visualizer.style"         // an SGVisualizerStyle
 #define SGKeyVisualizerColor @"spotifyglass.visualizer.color"         // an SGVisualizerColor
 #define SGKeyVisualizerMirror @"spotifyglass.visualizer.mirror"       // on until switched off
@@ -49,6 +60,10 @@ NSInteger SGVisualizerBarCount(void);
 // How wide a bar is drawn against the room it has: 0.6, 1 (unset) or 1.4 times its share, never more than the
 // room between bars, and never under what a 1024 bar ring needs to read as a line.
 CGFloat SGVisualizerWidthFactor(void);
+float SGVisualizerBassShare(void);               // 0, 0.2 (unset), 0.25 or 1/3
+CGFloat SGVisualizerHeightFactor(void);          // how much of the room out to the edge the bars may take
+void SGVisualizerResponse(float *rise, float *fall);
+NSTimeInterval SGVisualizerRotationPeriod(void); // seconds a turn, 0 for none
 
 // VisualizerTap.x: the tap reads the sound only while at least one ring is on screen, or the lock screen
 // draws frames. Main thread.

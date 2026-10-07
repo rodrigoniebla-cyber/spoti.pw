@@ -186,9 +186,12 @@ Shared:
                   bands against the loudest lately (SGSpectrum.m, plain C, harness/visualizer/; the newest 1024
                   samples, 2048 for Bass and for more than 256 bars, with a quick rise and fall, so the bars are on the
                   beat; 48 to 1024 bars, from 128 up read between the bins and smoothed into their neighbours, so 1024
-                  is a smooth circle), following
+                  is a smooth circle; a fifth of the ring, or Even, a quarter or a third, for 20 to 100 Hz and the rest
+                  from 100 Hz up, read between bins on the longer window, which Bass, all bass already, ignores; bars
+                  that rise and fall snappily, normally or smoothly), following
                   everything, the beat or the bass at a strength, as Music Haptics does or with Music Haptics' own
-                  settings; SGVisualizerView draws them as bars, a wave or dots, thin, normal or thick, in the accent,
+                  settings; SGVisualizerView draws them as bars, a wave or dots, thin, normal or thick, short, medium or
+                  full height, with falling peak caps and a slow or fast turn of the whole ring if asked, in the accent,
                   white, every hue or the Cover gradient (SGCoverPalette.m: the playing cover's four main colours, off
                   the main thread from the now playing artwork once per track, SGPalette.m, plain C, voting by hue
                   weighted by saturation and brightness, tested in harness/visualizer/palette_test.c; drawn as a conic

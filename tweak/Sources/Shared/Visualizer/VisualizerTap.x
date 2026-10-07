@@ -21,6 +21,7 @@ static float sg_window[SGSpectrumWindow];
 static NSInteger sg_count;
 static double sg_rate;
 static SGSpectrumFollows sg_follows;
+static float sg_bassShare;
 
 static inline float sampleAt(const void *data, UInt32 index, UInt32 bytes, BOOL isFloat, UInt32 fraction) {
     if (bytes == 4) {
@@ -163,7 +164,11 @@ BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed) {
     if (count != sg_count || now != sg_rate) {
         sg_follows = follows();
         sg_strength = strength();
-        SGSpectrumReset(&sg_analyzer, (int)count, now, sg_follows);
+        sg_bassShare = SGVisualizerBassShare();
+        float rise, fall;
+        SGVisualizerResponse(&rise, &fall);
+        SGSpectrumSetResponse(&sg_analyzer, rise, fall);
+        SGSpectrumResetShaped(&sg_analyzer, (int)count, now, sg_follows, sg_bassShare);
         sg_count = count;
         sg_rate = now;
     }
@@ -178,8 +183,12 @@ BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed) {
 }
 
 static void settingsChanged(void) {
-    // Read once here rather than every frame; a change of what is followed starts the bars over.
+    // Read once here rather than every frame; a change of what is followed, or of the bass's share of the
+    // ring, starts the bars over. How they move applies from the next frame.
     sg_strength = strength();
     SGSpectrumFollows now = follows();
-    if (now != sg_follows) sg_count = 0;
+    if (now != sg_follows || SGVisualizerBassShare() != sg_bassShare) sg_count = 0;
+    float rise, fall;
+    SGVisualizerResponse(&rise, &fall);
+    SGSpectrumSetResponse(&sg_analyzer, rise, fall);
 }

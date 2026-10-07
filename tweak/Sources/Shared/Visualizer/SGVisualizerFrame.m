@@ -1,7 +1,8 @@
 // One still of the visualizer (Visualizer.h), for the lock screen's artwork: the cover blurred behind,
 // the cover itself as a circle in the middle and the bars round it, as the ring in the player draws them
-// (SGVisualizerView.m), in its style, colour (the cover's gradient included) width and mirror. With a line to show, the ring moves up and the
-// line and the next one sit under it. Drawn with an image renderer, which any thread may use.
+// (SGVisualizerView.m), in its style, colour (the cover's gradient included), width, height and mirror. The
+// peaks and the rotation are the player's only: a still keeps no caps from frame to frame and has nothing to
+// turn. With a line to show, the ring moves up and the line and the next one sit under it. Drawn with an image renderer, which any thread may use.
 #import "Core/SGCore.h"
 #import "SGCoverPalette.h"
 #import "Visualizer.h"
@@ -44,7 +45,7 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
         CGFloat outer = side * (lyrics ? 0.33 : 0.45);
         CGFloat radius = outer * 0.62;   // the cover's, as the player's ring keeps it to 64 % of the square
         CGFloat inner = radius + side * 0.012;
-        CGFloat reach = outer - inner;
+        CGFloat reach = (outer - inner) * SGVisualizerHeightFactor();
 
         // The cover, a circle.
         CGRect coverBox = CGRectMake(centre.x - radius, centre.y - radius, radius * 2, radius * 2);

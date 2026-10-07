@@ -25,6 +25,32 @@ CGFloat SGVisualizerWidthFactor(void) {
     }
 }
 
+// An index stored under `key` into `list`, `fallback` unset, kept inside it.
+static double pick(NSString *key, NSArray<NSNumber *> *list, NSInteger fallback) {
+    NSInteger index = SGInt(key, fallback);
+    return list[(NSUInteger)MAX(0, MIN((NSInteger)list.count - 1, index))].doubleValue;
+}
+
+float SGVisualizerBassShare(void) {
+    return (float)pick(SGKeyVisualizerBassShare, @[@0, @0.2, @0.25, @(1.0 / 3)], 1);
+}
+
+CGFloat SGVisualizerHeightFactor(void) {
+    return pick(SGKeyVisualizerHeight, @[@0.55, @0.78, @1], 2);
+}
+
+void SGVisualizerResponse(float *rise, float *fall) {
+    // Snappy drops away at once, Normal is the analyzer's own, Smooth glides both ways.
+    NSInteger index = MAX(0, MIN(2, SGInt(SGKeyVisualizerResponse, 1)));
+    static const float rises[] = {0.95f, 0.8f, 0.4f}, falls[] = {0.5f, 0.3f, 0.1f};
+    if (rise) *rise = rises[index];
+    if (fall) *fall = falls[index];
+}
+
+NSTimeInterval SGVisualizerRotationPeriod(void) {
+    return pick(SGKeyVisualizerRotation, @[@0, @40, @12], 0);
+}
+
 static void changed(void) {
     [NSNotificationCenter.defaultCenter postNotificationName:SGVisualizerSettingsDidChangeNotification object:nil];
 }
@@ -42,6 +68,19 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     follows.choiceNotes = @[@"Every band at its level", @"The drums jump out of the rest", @"The low end, all the way round"];
     follows.chosen = ^(NSInteger index) { changed(); };
     follows.visible = own;
+    SGModRow *bass = SGChoiceRow(@"Bass area", nil, SGKeyVisualizerBassShare, @[@"Even", @"A fifth", @"A quarter", @"A third"], 1);
+    bass.choiceNotes = @[@"One scale from 40 Hz up, so the lows get little room", @"20 to 100 Hz across a fifth of the ring, the rest after it",
+                         @"20 to 100 Hz across a quarter", @"20 to 100 Hz across a third"];
+    bass.choiceFooter = @"The rest of the ring runs from 100 Hz up, spread the same way. With Follows set to Bass the whole ring is the low end already.";
+    bass.chosen = ^(NSInteger index) { changed(); };
+    // Gone while the ring follows the bass, read the way the tap reads it.
+    bass.visible = ^BOOL {
+        NSInteger following = SGFlag(SGKeyVisualizerLikeHaptics, NO) ? SGMusicHapticsFollows() : SGInt(SGKeyVisualizerFollows, SGMusicFollowsEverything);
+        return following != SGMusicFollowsBass;
+    };
+    SGModRow *response = SGChoiceRow(@"Movement", nil, SGKeyVisualizerResponse, @[@"Snappy", @"Normal", @"Smooth"], 1);
+    response.choiceNotes = @[@"Up on the hit and straight back down", @"Quick both ways", @"Gliding, slower to rise and to fall"];
+    response.chosen = ^(NSInteger index) { changed(); };
     SGModRow *bars = SGChoiceRow(@"Bars", nil, SGKeyVisualizerBars, @[@"48", @"64", @"96", @"128", @"256", @"512", @"1024"], 1);
     bars.choiceNotes = @[@"Chunky", @"The default", @"Detailed", @"Dense", @"Fine", @"Very fine", @"A smooth circle"];
     bars.choiceFooter = @"From 256 on the bars are read between the sound's bins and smoothed into one another, so the ring turns into a curve. "
@@ -49,6 +88,9 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     bars.chosen = ^(NSInteger index) { changed(); };
     SGModRow *width = SGChoiceRow(@"Bar width", nil, SGKeyVisualizerWidth, @[@"Thin", @"Normal", @"Thick"], SGVisualizerWidthNormal);
     width.chosen = ^(NSInteger index) { changed(); };
+    SGModRow *height = SGChoiceRow(@"Bar height", nil, SGKeyVisualizerHeight, @[@"Short", @"Medium", @"Full"], 2);
+    height.choiceNotes = @[@"About half the way to the edge", @"Three quarters of the way", @"All the way to the edge"];
+    height.chosen = ^(NSInteger index) { changed(); };
     SGModRow *style = SGChoiceRow(@"Style", nil, SGKeyVisualizerStyle, @[@"Bars", @"Wave", @"Dots"], SGVisualizerStyleBars);
     style.chosen = ^(NSInteger index) { changed(); };
     SGModRow *color = SGChoiceRow(@"Colour", nil, SGKeyVisualizerColor, @[@"Accent", @"White", @"Spectrum", @"Cover gradient"], SGVisualizerColorAccent);
@@ -56,7 +98,13 @@ NSArray<SGModRow *> *SGVisualizerRows(NSString *waitsOnKey) {
     color.chosen = ^(NSInteger index) { changed(); };
     SGModRow *mirror = SGSwitchRow(@"Mirror", @"Each side the other's reflection", SGKeyVisualizerMirror);
     mirror.changed = ^(BOOL on) { changed(); };
-    NSArray<SGModRow *> *rows = @[likeHaptics, strength, follows, bars, width, style, color, mirror];
+    SGModRow *peaks = SGOptionRow(@"Peaks", @"A cap at each bar's peak that falls slowly", SGKeyVisualizerPeaks);
+    peaks.changed = ^(BOOL on) { changed(); };
+    peaks.visible = ^BOOL { return SGInt(SGKeyVisualizerStyle, SGVisualizerStyleBars) == SGVisualizerStyleBars; };
+    SGModRow *rotation = SGChoiceRow(@"Rotation", nil, SGKeyVisualizerRotation, @[@"Off", @"Slow", @"Fast"], 0);
+    rotation.choiceNotes = @[@"The ring stays put", @"A turn every 40 seconds", @"A turn every 12 seconds"];
+    rotation.chosen = ^(NSInteger index) { changed(); };
+    NSArray<SGModRow *> *rows = @[likeHaptics, strength, follows, bass, response, bars, width, height, style, color, mirror, peaks, rotation];
     if (waitsOnKey) for (SGModRow *row in rows) SGWaitsOn(row, waitsOnKey, NO);
     return rows;
 }

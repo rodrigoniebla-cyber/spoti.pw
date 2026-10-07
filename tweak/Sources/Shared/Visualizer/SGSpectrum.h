@@ -14,8 +14,11 @@
 // strength, and a fast rise and a slower fall. Up to 128 bars each takes whole bins; past that there are more
 // bars than bins down low, so each reads the spectrum at its own place between two bins and a bar is
 // smoothed with its neighbours, which is what makes 1024 of them a smooth circle rather than steps. Follows, as Music Haptics has it (Shared/Haptics):
-//     Everything  40 Hz to 14 kHz, every band at its level
+//     Everything  40 Hz to 14 kHz, every band at its level; or, with a bass share, 20 Hz to 100 Hz across that
+//                 share of the ring (a fifth as it ships) and 100 Hz to 14 kHz across the rest, each part log spaced
+//                 (always read between bins, as the low end has few)
 //     Beat        the same bands, each lifted by how fast it just rose, so the drums jump out
+// How quickly the bars rise and fall is set apart (SGSpectrumSetResponse), quick both ways as it ships.
 //     Bass        25 Hz to 250 Hz across the whole ring
 #pragma once
 #include <stdatomic.h>
@@ -46,6 +49,8 @@ typedef struct {
     double sampleRate;
     SGSpectrumFollows follows;
     float lowHz, highHz;
+    float bassShare;                     // the share of the bars for 20 to 100 Hz, 0 for one log scale
+    float rise, fall;                    // a share of the way per 60th of a second
     float window[SGSpectrumWindow];   // the Hann window
     float real[SGSpectrumWindow], imaginary[SGSpectrumWindow];
     int first[SGSpectrumMaxBands + 1];   // each band's first bin, and the end of the last
@@ -57,8 +62,14 @@ typedef struct {
     float peakDb;                        // the loudest band lately
 } SGSpectrumAnalyzer;
 
-// Before the first window, and whenever the bar count, the rate or what is followed changes.
+// Before the first window, and whenever the bar count, the rate or what is followed changes. The plain reset
+// spreads the bars on one log scale; the shaped one gives `bassShare` (0...0.5) of them to 20 to 100 Hz, but
+// for Bass, which is all bass already.
 void SGSpectrumReset(SGSpectrumAnalyzer *analyzer, int count, double sampleRate, SGSpectrumFollows follows);
+void SGSpectrumResetShaped(SGSpectrumAnalyzer *analyzer, int count, double sampleRate, SGSpectrumFollows follows, float bassShare);
+// How fast the bars rise and fall, each a share (0.02...1) of the way per 60th of a second; kept by a reset.
+void SGSpectrumSetResponse(SGSpectrumAnalyzer *analyzer, float rise, float fall);
+extern const float SGSpectrumDefaultRise, SGSpectrumDefaultFall;
 // One frame: `window` from SGSpectrumRingRead (or silence), `elapsed` the seconds since the last frame,
 // `strength` 0.2...2 (1 as it ships). Writes `count` bars into `bars`.
 void SGSpectrumProcess(SGSpectrumAnalyzer *analyzer, const float *window, float elapsed, float strength, float *bars);
