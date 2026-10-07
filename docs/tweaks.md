@@ -18,7 +18,13 @@
     tweak/Sources/Diagnostics/  screen dumps, the tree server and the main thread hang sampler of FLEX builds
     extension/LiveActivity/     the Live Activity widget, a WidgetKit extension of its own
     extension/AppGroups/        a dylib loaded by Spotify and its home screen widget that moves Spotify's App Groups
-                                into a group the re-signed IPA has; without it the widget stays a placeholder
+                                into a group the re-signed IPA has; without it the widget stays a placeholder. Keychain.m, in the
+                                same dylib (so in Spotify and each Siri and widget extension), answers the SecItem calls that name
+                                Spotify's <team>.com.spotify.client.extension-credentials group from a property list in that App
+                                Group's container, through dyld's __interpose, since the re-signed app and its Siri extension are
+                                not entitled to that keychain group and the extension could not read the login token the app keeps
+                                there (Siri answered "verify your account details"); every other call goes to the real keychain, and
+                                a process entitled to the group for real is left alone
     scripts/                    pipeline.sh (build + inject), build-extension.sh (the widget extension, without an
                                 Xcode project), merge-appintents.py (the widget's intents into Spotify's), insert-dylib.py (a load command into
                                 Spotify's widget), install.sh (sign + install), record-trees.py, record-session.py,
