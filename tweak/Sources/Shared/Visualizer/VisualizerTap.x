@@ -97,10 +97,11 @@ static void join(void) {
     });
 }
 
-// A ring on screen in the app, or the lock screen's frames (LockScreenLyrics.x), either keeps it reading.
-static BOOL sg_ringShows, sg_lockScreen;
+// A ring on screen in the app, the lock screen's frames (LockScreenLyrics.x) or the Live Activity's player
+// view (Shared/LiveActivity), any of them keeps it reading.
+static BOOL sg_ringShows, sg_lockScreen, sg_liveActivity;
 static void listen(void) {
-    BOOL listening = sg_ringShows || sg_lockScreen;
+    BOOL listening = sg_ringShows || sg_lockScreen || sg_liveActivity;
     if (listening && !SGOff("visualizer")) join();
     atomic_store(&sg_listening, listening);
 }
@@ -112,6 +113,11 @@ void SGVisualizerSetListening(BOOL listening) {
 
 void SGVisualizerSetLockScreenListening(BOOL listening) {
     sg_lockScreen = listening;
+    listen();
+}
+
+void SGVisualizerSetLiveActivityListening(BOOL listening) {
+    sg_liveActivity = listening;
     listen();
 }
 
@@ -152,6 +158,17 @@ BOOL SGVisualizerReadBars(float *bars, NSInteger count, float elapsed) {
     CFTimeInterval at = CACurrentMediaTime();
     if (count == lastCount && at - lastAt < 0.004) {
         memcpy(bars, lastBars, sizeof(float) * count);
+        return lastHeard;
+    }
+    // Another reader with another count read a moment ago (the lock screen's frames while the Live Activity
+    // asks for its few): its bars, gathered into this many, rather than the analysis started over for each.
+    if (lastCount > 0 && count != lastCount && at - lastAt < 0.3) {
+        for (NSInteger b = 0; b < count; b++) {
+            NSInteger from = b * lastCount / count, to = MAX(from + 1, (b + 1) * lastCount / count);
+            float most = 0;
+            for (NSInteger i = from; i < to && i < lastCount; i++) most = MAX(most, lastBars[i]);
+            bars[b] = most;
+        }
         return lastHeard;
     }
     // Music Haptics' strength and what it follows can change on their own page; read again now and then.

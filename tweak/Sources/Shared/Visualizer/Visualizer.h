@@ -74,10 +74,11 @@ CGFloat SGVisualizerHeightFactor(void);          // how much of the room out to 
 void SGVisualizerResponse(float *rise, float *fall);
 NSTimeInterval SGVisualizerRotationPeriod(void); // seconds a turn, 0 for none
 
-// VisualizerTap.x: the tap reads the sound only while at least one ring is on screen, or the lock screen
-// draws frames. Main thread.
+// VisualizerTap.x: the tap reads the sound only while at least one ring is on screen, the lock screen draws
+// frames or the Live Activity shows bars. Main thread.
 void SGVisualizerSetListening(BOOL listening);
 void SGVisualizerSetLockScreenListening(BOOL listening);
+void SGVisualizerSetLiveActivityListening(BOOL listening);
 
 // The visualizer on the lock screen (Shared/LockScreenLyrics/LockScreenLyrics.x): the now playing artwork
 // becomes the cover in a ring of bars over the cover blurred, drawn again several times a second while

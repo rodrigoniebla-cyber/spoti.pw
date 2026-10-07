@@ -10,7 +10,13 @@
 #import "Headers/SPTPlayer.h"
 #import "Shared/Lyrics/Lyrics.h"
 #import "Shared/Player/SGLibrary.h"
+#import "Shared/Visualizer/Visualizer.h"
+#import "Shared/Visualizer/SGCoverPalette.h"
 #import "LiveActivity.h"
+
+typedef struct __SecTask *SecTaskRef;
+extern SecTaskRef SecTaskCreateFromSelf(CFAllocatorRef allocator);
+extern CFTypeRef SecTaskCopyValueForEntitlement(SecTaskRef task, CFStringRef entitlement, CFErrorRef *error);
 
 API_AVAILABLE(ios(17.0))
 @interface SGLiveActivityBridge : NSObject
@@ -20,7 +26,9 @@ API_AVAILABLE(ios(17.0))
                  tab:(NSInteger)tab title:(NSString *)title artist:(NSString *)artist shuffle:(BOOL)shuffle repeatMode:(NSInteger)repeatMode
             timerEnd:(NSDate *)timerEnd timerEndOfTrack:(BOOL)timerEndOfTrack liked:(BOOL)liked
          translation:(NSString *)translation tint:(NSInteger)tint progress:(double)progress
-          trackStart:(NSDate *)trackStart trackEnd:(NSDate *)trackEnd;
+          trackStart:(NSDate *)trackStart trackEnd:(NSDate *)trackEnd
+                bars:(NSString *)bars barColours:(NSArray<NSNumber *> *)barColours coverGroup:(NSString *)coverGroup
+            coverKey:(NSString *)coverKey coverThumbnail:(NSData *)coverThumbnail duration:(double)duration;
 + (void)end;
 @end
 
@@ -157,6 +165,132 @@ static NSInteger coverTint(void) {
     return sg_tint;
 }
 
+#pragma mark - the player view
+
+// The cover for the player view: a file in the first App Group the app is entitled to (sorted, as the App
+// Group shim sorts them, extension/AppGroups), which the widget reads if it may open that group too, and a
+// small picture carried in the state for when it may not; with them, the cover's colours for the bars. Read
+// once per track, off the main thread, from the artwork Spotify hands the system's now playing, as coverTint.
+static const CGFloat kCoverSide = 240, kThumbnailSide = 40;
+static const NSUInteger kLiveBands = 24;
+static NSString *sg_coverTrack, *sg_coverGroup, *sg_coverKey;
+static NSData *sg_coverThumbnail;
+static NSArray<NSNumber *> *sg_barColours;
+static BOOL sg_coverReading;
+// The bars as last sent, and when.
+static NSString *sg_barsText = @"";
+static CFTimeInterval sg_barsAt;
+
+static NSURL *coverFolder(NSString **groupOut) {
+    static NSURL *folder;
+    static NSString *group;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        SecTaskRef task = SecTaskCreateFromSelf(NULL);
+        NSArray *groups = nil;
+        if (task) {
+            groups = CFBridgingRelease(SecTaskCopyValueForEntitlement(task, CFSTR("com.apple.security.application-groups"), NULL));
+            CFRelease(task);
+        }
+        if (![groups isKindOfClass:NSArray.class]) return;
+        for (NSString *candidate in [groups sortedArrayUsingSelector:@selector(compare:)]) {
+            if (![candidate isKindOfClass:NSString.class]) continue;
+            NSURL *container = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:candidate];
+            if (!container) continue;
+            folder = [container URLByAppendingPathComponent:@"Library/SpotifyGlass/LiveActivity" isDirectory:YES];
+            [NSFileManager.defaultManager createDirectoryAtURL:folder withIntermediateDirectories:YES attributes:nil error:nil];
+            group = candidate;
+            break;
+        }
+        SGLog(@"live activity: the cover goes %@", group ? [@"into the App Group " stringByAppendingString:group] : @"only into the state (no App Group)");
+    });
+    if (groupOut) *groupOut = group;
+    return folder;
+}
+
+static UIImage *scaled(UIImage *image, CGFloat side) {
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = 1;
+    format.opaque = YES;
+    return [[[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(side, side) format:format] imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [image drawInRect:CGRectMake(0, 0, side, side)];
+    }];
+}
+
+static NSInteger rgbOf(UIColor *color) {
+    CGFloat r = 0, g = 0, b = 0;
+    [color getRed:&r green:&g blue:&b alpha:NULL];
+    return (NSInteger)lround(r * 255) << 16 | (NSInteger)lround(g * 255) << 8 | (NSInteger)lround(b * 255);
+}
+
+static void refreshCover(NSString *trackID) {
+    if (!trackID || sg_coverReading || [trackID isEqualToString:sg_coverTrack]) return;
+    id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
+    if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return;
+    sg_coverTrack = [trackID copy];
+    sg_coverReading = YES;
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("spotifyglass.liveactivity.cover", DISPATCH_QUEUE_SERIAL); });
+    MPMediaItemArtwork *cover = artwork;
+    NSString *track = sg_coverTrack;
+    dispatch_async(queue, ^{
+        UIImage *image = [cover imageWithSize:CGSizeMake(kCoverSide, kCoverSide)];
+        NSString *group = nil, *key = nil;
+        NSData *thumbnail = nil;
+        NSMutableArray<NSNumber *> *colours = [NSMutableArray array];
+        if (image.CGImage) {
+            NSURL *folder = coverFolder(&group);
+            if (folder) {
+                // A name a track, so the widget never shows a cover the file has since been replaced with.
+                key = track;
+                NSData *data = UIImageJPEGRepresentation(scaled(image, kCoverSide), 0.8);
+                NSURL *file = [folder URLByAppendingPathComponent:[NSString stringWithFormat:@"cover-%@.jpg", key]];
+                if (![data writeToURL:file options:NSDataWritingAtomic error:nil]) group = key = nil;
+                for (NSURL *old in [NSFileManager.defaultManager contentsOfDirectoryAtURL:folder includingPropertiesForKeys:nil options:0 error:nil]) {
+                    if (![old.lastPathComponent isEqualToString:file.lastPathComponent]) [NSFileManager.defaultManager removeItemAtURL:old error:nil];
+                }
+            }
+            thumbnail = UIImageJPEGRepresentation(scaled(image, kThumbnailSide), 0.5);
+            NSArray<UIColor *> *palette = SGCoverPaletteOfImage(image);
+            NSArray<UIColor *> *ordered = SGVisualizerGradientStops(palette, SGVisualizerGradientAlong, NO, NO);
+            for (UIColor *colour in palette.count > 1 ? ordered : palette) [colours addObject:@(rgbOf(colour))];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            sg_coverReading = NO;
+            if (![track isEqualToString:sg_coverTrack]) return;
+            sg_coverGroup = group ?: @"";
+            sg_coverKey = key ?: @"";
+            sg_coverThumbnail = thumbnail;
+            sg_barColours = colours;
+        });
+    });
+}
+
+// The bars for the player view: while it is the view, the bars are on, the song plays and Spotify is not in
+// front (where the card is not seen), read as often as the rate asks, as a hex digit a band.
+static NSString *liveBars(BOOL player, BOOL paused) {
+    BOOL want = player && !paused && !SGOff("visualizer") && SGEnabled(SGKeyLiveActivityBars)
+                && UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
+    SGVisualizerSetLiveActivityListening(want);
+    if (!want) {
+        sg_barsText = @"";
+        return sg_barsText;
+    }
+    static const double rates[] = {1, 2, 4};
+    double rate = rates[MAX(0, MIN(2, SGInt(SGKeyLiveActivityBarsRate, 1)))];
+    CFTimeInterval now = CACurrentMediaTime();
+    if (sg_barsText.length && now - sg_barsAt < 1 / rate - 0.02) return sg_barsText;
+    float levels[kLiveBands];
+    SGVisualizerReadBars(levels, kLiveBands, (float)MIN(0.25, sg_barsAt > 0 ? now - sg_barsAt : 0.25));
+    sg_barsAt = now;
+    char digits[kLiveBands + 1];
+    for (NSUInteger i = 0; i < kLiveBands; i++) digits[i] = "0123456789abcdef"[MAX(0, MIN(15, lroundf(levels[i] * 15)))];
+    digits[kLiveBands] = 0;
+    sg_barsText = @(digits);
+    return sg_barsText;
+}
+
 // The translation of the line being sung, in the Lyrics page's language, where the lyrics have one.
 static NSString *translationOf(NSString *trackID) {
     if (!SGEnabled(SGKeyLiveActivityTranslation)) return @"";
@@ -228,7 +362,7 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
     if (view == SGLiveActivityLyrics) line = lyricsLine(trackID, &next);
 
     NSMutableArray<NSString *> *titles = [NSMutableArray array], *artists = [NSMutableArray array], *uris = [NSMutableArray array];
-    if (view != SGLiveActivityLyrics) {
+    if (view == SGLiveActivityQueue || view == SGLiveActivityPanel) {
         NSUInteger limit = view == SGLiveActivityQueue ? kUpNextQueue : kUpNextPanel;
         for (SPTPlayerTrack *upcoming in upNext(state)) {
             if (titles.count == limit) break;
@@ -238,14 +372,20 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
         }
     }
 
-    BOOL panel = view == SGLiveActivityPanel;
-    NSString *title = panel ? track.trackTitle : @"", *artist = panel ? track.artistName ?: @"" : @"";
+    BOOL panel = view == SGLiveActivityPanel, playerView = view == SGLiveActivityPlayer;
+    NSString *title = panel || playerView ? track.trackTitle : @"", *artist = panel || playerView ? track.artistName ?: @"" : @"";
     BOOL shuffle = panel && state.options.shufflingContext;
     NSInteger repeatMode = panel ? repeatModeOf(state.options) : 0;
     NSInteger tab = panel ? sg_tab : 0;
     NSDate *sleepEnd = sg_sleepEnd;
     BOOL endOfTrack = sg_sleepTrack != nil;
-    BOOL liked = panel && trackID && [sg_liked containsObject:trackID];
+    BOOL liked = (panel || playerView) && trackID && [sg_liked containsObject:trackID];
+    if (playerView) refreshCover(trackID);
+    BOOL coverReady = playerView && [trackID isEqualToString:sg_coverTrack] && !sg_coverReading;
+    NSString *bars = liveBars(playerView, paused);
+    NSString *coverGroup = coverReady ? sg_coverGroup ?: @"" : @"", *coverKey = coverReady ? sg_coverKey ?: @"" : @"";
+    NSData *coverThumbnail = coverReady ? sg_coverThumbnail : nil;
+    NSArray<NSNumber *> *barColours = coverReady ? sg_barColours ?: @[] : @[];
     NSString *translation = view == SGLiveActivityLyrics && ![line isEqualToString:@"♪"] ? translationOf(trackID) : @"";
     NSInteger tint = coverTint();
     // The bar runs on its own from the track's start to its end while it plays, so only a seek, a pause or a
@@ -259,13 +399,16 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
     NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObjects:@(view).stringValue, paused ? @"1" : @"0", line, next,
         @(tab).stringValue, title, artist, shuffle ? @"1" : @"0", @(repeatMode).stringValue,
         @((long long)sleepEnd.timeIntervalSince1970).stringValue, endOfTrack ? @"1" : @"0", liked ? @"1" : @"0", translation, @(tint).stringValue,
-        paused ? @(lround(progress * 100)).stringValue : @(lround(trackStart.timeIntervalSince1970 / 2)).stringValue, nil];
+        paused ? @(lround(progress * 100)).stringValue : @(lround(trackStart.timeIntervalSince1970 / 2)).stringValue,
+        bars, coverKey, @(coverThumbnail.length).stringValue, [barColours componentsJoinedByString:@","], nil];
     for (NSUInteger i = 0; i < titles.count; i++) [parts addObject:[NSString stringWithFormat:@"%@\t%@\t%@", titles[i], artists[i], uris[i]]];
     send([parts componentsJoinedByString:@"\n"], ^{
         [SGLiveActivityBridge showWithView:view paused:paused line:line nextLine:next titles:titles artists:artists uris:uris
                                         tab:tab title:title artist:artist shuffle:shuffle repeatMode:repeatMode
                                    timerEnd:sleepEnd timerEndOfTrack:endOfTrack liked:liked
-                                translation:translation tint:tint progress:progress trackStart:trackStart trackEnd:trackEnd];
+                                translation:translation tint:tint progress:progress trackStart:trackStart trackEnd:trackEnd
+                                       bars:bars barColours:barColours coverGroup:coverGroup coverKey:coverKey
+                             coverThumbnail:coverThumbnail duration:duration];
     });
 }
 
@@ -332,6 +475,16 @@ static void runAction(NSString *action) {
         NSString *trackID = SGKaraokePlayingTrack();
         if ([sg_liked containsObject:trackID]) saveTrack(trackID, NO);
         result = [player skipToNextTrackWithOptions:nil];
+    } else if ([name isEqualToString:@"seek"]) {
+        // A tap along the player view's bar: that share of the track.
+        double duration = [state respondsToSelector:@selector(duration)] ? state.duration : 0;
+        double share = MAX(0, MIN(1, value.doubleValue));
+        if (duration <= 0 || ![player respondsToSelector:@selector(seekTo:)]) {
+            SGLog(@"live activity: cannot seek (length %.0f s)", duration);
+            return;
+        }
+        [player seekTo:share * duration];
+        result = @(share * duration);
     } else if ([name isEqualToString:@"timer"]) {
         if ([value isEqualToString:@"cancel"]) {
             clearSleepTimer();
@@ -361,6 +514,7 @@ void SGSetLiveActivityEnabled(BOOL on) {
         sg_lastStart = nil;
         clearSleepTimer();
         if (!on) {
+            SGVisualizerSetLiveActivityListening(NO);
             [SGLiveActivityBridge end];
             SGLog(@"live activity: off");
             return;

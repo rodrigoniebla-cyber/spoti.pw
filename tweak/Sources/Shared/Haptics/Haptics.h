@@ -64,6 +64,8 @@ void SGPrepareFeedback(SGFeedback feedback);
 // SystemMusicHaptics.x: iOS's own Music Haptics is on and has a haptic track for the song playing, so the
 // mod's steps aside.
 BOOL SGSystemMusicHapticsCovers(void);
+// What iOS's Music Haptics is doing for the song playing, in a few words, for the Vibrations page.
+NSString *SGSystemMusicHapticsStatus(void);
 
 // From the Music Haptics switch: starts or stops listening at once.
 void SGSetMusicHapticsEnabled(BOOL on);

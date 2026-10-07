@@ -257,9 +257,19 @@ Shared:
                   iOS Music Haptics (SystemMusicHaptics.x, iOS 18, on until switched off, read at launch): the IPA
                   declares MusicHapticsSupported, each track's ISRC is asked of Spotify's Web API with the app's own
                   token and added to the now playing info, so iOS plays its own haptic track in the background and
-                  on the lock screen; while MAMusicHapticsManager says it has one for the song, the mod's steps aside
-    LiveActivity/ a Live Activity on the lock screen and in the Dynamic Island in one of three views, the line being
-                  sung with the next one under it, the tracks up next (a tap on one skipping ahead to it), or a control
+                  on the lock screen; while MAMusicHapticsManager says it has one for the song, the mod's steps aside.
+                  The lookup is tried again while the song plays when Spotify's token is not there yet or it fails, and
+                  the Vibrations page's Now row says what iOS's is doing for the song. iOS plays no haptics of an app's
+                  own in the background, so out of the app iOS's is the only one there is
+    LiveActivity/ a Live Activity on the lock screen and in the Dynamic Island in one of four views, the line being
+                  sung with the next one under it, the tracks up next (a tap on one skipping ahead to it), the player (the
+                  cover in a ring of the visualizer's bars, mirrored, each bar in the cover's colours from the inside out,
+                  read once, twice or four times a second while Spotify is not in front and the song plays and sent as a
+                  hex digit a band, the widget gliding them to their new lengths; the cover a file in the app's first App
+                  Group, read by the widget when it may open the group, and a 40 px picture in the state otherwise, left
+                  out when the state would pass ActivityKit's 4 KB; previous, play and pause, next and like; a bar with the
+                  time in and left, cut into 24 buttons that seek to where they are, which iOS's own controls cannot be
+                  replaced by but sit beside), or a control
                   menu of tabs, Controls (previous, play and pause, next, shuffle, repeat), Queue and a sleep Timer of
                   the mod's own that pauses Spotify (LiveActivity.h lists its files): a timer polls the player and
                   sends a new state only when what the view shows changes, local updates only, no push. Taps are
