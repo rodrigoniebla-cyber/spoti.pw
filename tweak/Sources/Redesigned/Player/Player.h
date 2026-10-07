@@ -21,7 +21,8 @@
 //     PlayerGestures.x   the gestures' hookup
 //     PlayerMorph.x      the open and close grown out of the now playing bar's card, the cover flown
 //     PlayerMenu.x       the ⋯ opening a menu the way the Music app draws one (SGRPlayerMenu.h), over
-//                        Spotify's own sheet, which it reads its rows from and keeps out of sight
+//                        Spotify's own sheet, which it reads its rows from and keeps out of sight; only
+//                        with SGRKeyPlayerMusicMenu on, otherwise the ⋯ opens Spotify's sheet as it is
 //
 // A Spotify Free account with pick and shuffle gets the player in another mode (NowPlayingReinventFreeMode),
 // whose header, information, duration, controls and footer units are classes of their own holding the
@@ -76,6 +77,11 @@ extern NSNotificationName const SGRPlayerFluidLookDidChangeNotification;
 NSArray<SGModSection *> *SGRPlayerBackgroundSections(void);
 
 #pragma mark - the ⋯ menu (PlayerMenu.x)
+
+// Off until switched on, and read at launch: the ⋯ opens Spotify's own sheet, which slides up from the bottom
+// with every row Spotify has, and Speed and pitch's block in it (Shared/Player/SpeedPitchMenu.x). On, it opens
+// the Music app style menu this file makes of that sheet's rows instead.
+#define SGRKeyPlayerMusicMenu @"spotifyglass.redesign.player.musicMenu"
 
 // Marks a sheet opened soon after a tap on `button`, the player's ⋯, as the one the menu takes over, and
 // the button as where the menu grows from (watching it twice does nothing).

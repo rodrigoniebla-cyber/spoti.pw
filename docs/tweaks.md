@@ -178,9 +178,15 @@ Shared:
                   shows, never at launch: registered there it froze Spotify as a song started) into a single writer
                   ring, only while a ring is on screen, and rings drawn in the same frame share one analysis; once a frame the newest 2048 samples go through a Hann window and an FFT into log spaced
                   bands against the loudest lately (SGSpectrum.m, plain C, harness/visualizer/; the newest 1024
-                  samples, 2048 for Bass, with a quick rise and fall, so the bars are on the beat), following
+                  samples, 2048 for Bass and for more than 256 bars, with a quick rise and fall, so the bars are on the
+                  beat; 48 to 1024 bars, from 128 up read between the bins and smoothed into their neighbours, so 1024
+                  is a smooth circle), following
                   everything, the beat or the bass at a strength, as Music Haptics does or with Music Haptics' own
-                  settings; SGVisualizerView draws them as bars, a wave or dots on a display link run the lyrics'
+                  settings; SGVisualizerView draws them as bars, a wave or dots, thin, normal or thick, in the accent,
+                  white, every hue or the Cover gradient (SGCoverPalette.m: the playing cover's four main colours, off
+                  the main thread from the now playing artwork once per track, SGPalette.m, plain C, voting by hue
+                  weighted by saturation and brightness, tested in harness/visualizer/palette_test.c; drawn as a conic
+                  gradient under the bars, mirrored when the ring is, fading to the next track's) on a display link run the lyrics'
                   way (60 to 120 Hz, down during player transitions and off screen). The redesigned player rings
                   its cover with one (PlayerArtwork.x, Player page > Visualizer): the cover a circle at 64 % with a
                   round shadow, the ring behind it in the tilt view fading with it, and the picture inside slowly
@@ -269,7 +275,9 @@ Redesigned:
                   (BarConnect.x, its own key and its own row on the Player page, apart from the native look's)
     Player/       the redesigned full screen player (Player.h lists its files), on Spotify Free's units too (a Free
                   account with pick and shuffle gets NowPlayingReinventFreeMode, whose units are classes of their own
-                  around the same elements, and each unit hook covers both); its ⋯ opens a menu the way the
+                  around the same elements, and each unit hook covers both); its ⋯ opens Spotify's own sheet, sliding up
+                  from the bottom with every row Spotify has and Speed and pitch's block in it (Shared/Player), unless
+                  Music app style menu is on (Player page, off until switched on, read at launch), when it opens a menu the way the
                   Music app draws one (PlayerMenu.x, SGRPlayerMenu.m): a pane of glass grown out of the button,
                   Add to playlist, Add to Queue and Share as three tiles across its top, groups of rows under
                   them, Speed and pitch opening onto Shared/Player's sliders in place, everything else Spotify
@@ -279,7 +287,7 @@ Redesigned:
                   through that ListRow; a page Spotify pushes onto the sheet (Share's destinations) shows the
                   sheet, and a sheet with no rows within 4 s is shown as it is. It opens on the rows the last
                   menu had, kept across launches, and moves to Spotify's as they come in, a tap meanwhile held
-                  until they do. Always on in the redesign. Tested in the simulator against harness/playermenu/
+                  until they do. Tested in the simulator against harness/playermenu/
                   With Sing on, on the built-in separator or the downloaded voice model (Mod Settings > Karaoke, Redesigned/Lyrics/SingSettings.m,
                   both applying at once), its microphone (Redesigned/Lyrics/SGRSingControl.m) sits in the
                   lyrics' bottom trailing corner, opposite their glass button, and goes down with the lines when the

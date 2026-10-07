@@ -1,5 +1,8 @@
-// Player redesign: the ⋯ opens the system's own menu, laid out the way the Music app lays out its own, in
-// place of Spotify's sheet of rows -- while what is in it, and what each row does, stay Spotify's.
+// Player redesign: with "Music app style menu" on (SGRKeyPlayerMusicMenu, off until switched on, read at launch)
+// the ⋯ opens the system's own menu, laid out the way the Music app lays out its own, in place of Spotify's
+// sheet of rows -- while what is in it, and what each row does, stay Spotify's. Off, none of this runs: the
+// ⋯ opens Spotify's sheet, sliding up from the bottom with every row it has, and Speed and pitch's block in it
+// (Shared/Player/SpeedPitchMenu.x puts that into the sheet under either look).
 //
 // The rows come from Swift item factories with no way in, and which there are depends on the track, where it
 // plays from, the account, the market and the flags; each does what only Spotify's code knows how to. So the
@@ -1025,7 +1028,7 @@ static void logDarkness(UIView *anyView) {
 %end
 
 %ctor {
-    if (!SGRedesignedUI()) return;
+    if (!SGRedesignedUI() || !SGFlag(SGRKeyPlayerMusicMenu, NO)) return;
     sgr_menuOn = YES;
     %init;
     SGRequireClasses(@[@"_TtC24ContextMenu_InternalImpl25ContextMenuViewController", @"_TtC22NavigationUI_SheetImpl27SheetPresentationController"]);
