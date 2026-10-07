@@ -12,12 +12,14 @@ NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image);
 NSInteger SGCoverPaletteWay(void);
 
 // The playing track's cover colours, read from the artwork Spotify hands the system's now playing, off the
-// main thread and once per track (Spotify's artwork handler can wait on the main thread, so it is never
-// called there). nil until the first is read, and the last track's until the next is. Main thread.
+// main thread and once per track and artwork (Spotify's artwork handler can wait on the main thread, so it is
+// never called there). A new track whose artwork is still the last one's waits a few seconds for its own. Not
+// read while a cover is offered. nil until the first is read, and the last track's until the next is. Main
+// thread.
 NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void);
-// The cover as it is on screen, handed over by whoever shows it (the redesigned player's ring), which is read
-// in place of the now playing artwork: the same picture as the one seen, at its full size, as soon as it
-// shows. The same image again does nothing. Main thread.
+// The cover as it is on screen, handed over by whoever shows it (the redesigned player's ring, twice a
+// second), which is read in place of the now playing artwork: the same picture as the one seen, at its full
+// size, as soon as it shows. The same image again is read once only. Main thread.
 void SGCoverPaletteOfferImage(UIImage *image);
 // The way the colours are read changed: the playing track's are read again, the next time they are asked
 // for or a cover is offered. Main thread.

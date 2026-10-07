@@ -92,6 +92,12 @@ static void spots(void) {
         assert(saturationOf(&rgb[i * 3]) > 0.3f);
     }
 
+    // A black and white cover with a faint blue cast, as a print or a JPEG has: greys, not blue.
+    fill(0, 0, W, H, 18, 20, 26);
+    fill(6, 6, 26, 26, 225, 228, 236);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 0, rgb) == 5);
+    for (int i = 0; i < 5; i++) assert(saturationOf(&rgb[i * 3]) < 0.12f);
+
     // A grey cover: greys, no hue anywhere.
     fill(0, 0, W, H, 120, 120, 120);
     assert(SGPaletteSample(pixels, W, H, W * 4, 4, 0, rgb) == 4);

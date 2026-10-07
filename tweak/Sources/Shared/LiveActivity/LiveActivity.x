@@ -223,14 +223,28 @@ static NSInteger rgbOf(UIColor *color) {
     return (NSInteger)lround(r * 255) << 16 | (NSInteger)lround(g * 255) << 8 | (NSInteger)lround(b * 255);
 }
 
-// The way the bars' colours were read for sg_coverTrack (SGCoverPaletteWay): another is read again.
+// The way the bars' colours were read for sg_coverTrack (SGCoverPaletteWay), and the artwork object they were
+// read from: another of either is read again.
 static NSInteger sg_coverColours;
+static __weak MPMediaItemArtwork *sg_coverArtwork;
+// A new track whose artwork is still the last track's, since when: Spotify hands the system the new track a
+// moment before its cover, and read then the last song's cover would stay up for the whole of this one.
+static CFTimeInterval sg_coverStaleSince;
 
 static void refreshCover(NSString *trackID) {
     NSInteger colours = SGCoverPaletteWay();
-    if (!trackID || sg_coverReading || ([trackID isEqualToString:sg_coverTrack] && colours == sg_coverColours)) return;
+    if (!trackID || sg_coverReading) return;
     id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
     if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return;
+    BOOL sameTrack = [trackID isEqualToString:sg_coverTrack];
+    if (sameTrack && colours == sg_coverColours && artwork == sg_coverArtwork) return;
+    if (!sameTrack && artwork == sg_coverArtwork) {
+        CFTimeInterval now = CACurrentMediaTime();
+        if (!sg_coverStaleSince) sg_coverStaleSince = now;
+        if (now - sg_coverStaleSince < 4) return;
+    }
+    sg_coverStaleSince = 0;
+    sg_coverArtwork = artwork;
     sg_coverTrack = [trackID copy];
     sg_coverColours = colours;
     sg_coverReading = YES;

@@ -38,20 +38,41 @@ NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image) {
 
 #pragma mark - the playing track's
 
+// What the palette was last read from: the track and the now playing artwork object, or the cover offered.
 static NSString *sg_paletteTrack;
-// The track the cover on screen was last read for: the now playing artwork's read gives way to it.
-static NSString *sg_offeredTrack;
+static __weak MPMediaItemArtwork *sg_paletteArtwork;
 static BOOL sg_reading;
 static NSArray<UIColor *> *sg_palette;
 static CFTimeInterval sg_retryAt;
-// The cover last offered, so the same one again does nothing.
+// The cover last offered, so the same one again does nothing, and when a cover was last offered: a ring on
+// screen offers its cover twice a second, and while it does the now playing artwork is not read at all.
 static const void *sg_offered;
+static CFTimeInterval sg_offeredAt;
+// A new track whose artwork is still the last track's, since when.
+static CFTimeInterval sg_staleSince;
+// How long a cover offered holds off the now playing artwork, and how long a new track waits for its own.
+static const CFTimeInterval kOfferHolds = 2, kStaleWait = 4;
+
+static BOOL offerHolds(void) {
+    return sg_offeredAt > 0 && CACurrentMediaTime() - sg_offeredAt < kOfferHolds;
+}
 
 NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void) {
     NSString *track = SGKaraokePlayingTrack();
-    if (!track || sg_reading || [track isEqualToString:sg_paletteTrack] || CACurrentMediaTime() < sg_retryAt) return sg_palette;
+    CFTimeInterval now = CACurrentMediaTime();
+    if (!track || sg_reading || now < sg_retryAt || offerHolds()) return sg_palette;
     id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
     if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return sg_palette;
+    BOOL sameTrack = [track isEqualToString:sg_paletteTrack];
+    if (sameTrack && artwork == sg_paletteArtwork) return sg_palette;
+    // Spotify hands the system the new track a moment before its cover: the artwork object still up is the
+    // last track's, and read now its colours would stay for the whole song. It is waited out, up to a point
+    // (two tracks of one album may well share the object).
+    if (!sameTrack && artwork == sg_paletteArtwork) {
+        if (!sg_staleSince) sg_staleSince = now;
+        if (now - sg_staleSince < kStaleWait) return sg_palette;
+    }
+    sg_staleSince = 0;
     sg_reading = YES;
     static dispatch_queue_t queue;
     static dispatch_once_t once;
@@ -62,16 +83,15 @@ NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void) {
         NSArray<UIColor *> *colors = SGCoverPaletteOfImage([cover imageWithSize:CGSizeMake(64, 64)]);
         dispatch_async(dispatch_get_main_queue(), ^{
             sg_reading = NO;
-            if ([wanted isEqualToString:sg_offeredTrack]) {
-                sg_paletteTrack = wanted;
-                return;
-            }
+            // A cover was offered meanwhile: the one on screen wins.
+            if (offerHolds()) return;
             // An image that could not be read is tried again the next time it is asked for.
             if (!colors) {
                 sg_retryAt = CACurrentMediaTime() + 3;
                 return;
             }
             sg_paletteTrack = wanted;
+            sg_paletteArtwork = cover;
             sg_palette = colors;
             [NSNotificationCenter.defaultCenter postNotificationName:SGCoverPaletteDidChangeNotification object:nil];
         });
@@ -87,16 +107,19 @@ static dispatch_queue_t paletteQueue(void) {
 }
 
 void SGCoverPaletteOfferImage(UIImage *image) {
-    if (!image.CGImage || (__bridge const void *)image == sg_offered) return;
+    if (!image.CGImage) return;
+    sg_offeredAt = CACurrentMediaTime();
+    if ((__bridge const void *)image == sg_offered) return;
     sg_offered = (__bridge const void *)image;
-    NSString *track = SGKaraokePlayingTrack();
     dispatch_async(paletteQueue(), ^{
         NSArray<UIColor *> *colors = SGCoverPaletteOfImage(image);
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!colors || sg_offered != (__bridge const void *)image) return;
-            sg_offeredTrack = track;
-            sg_paletteTrack = track;
             sg_palette = colors;
+            // Read from the picture, not the artwork: the next read of the artwork, once no ring offers, is
+            // a fresh one.
+            sg_paletteTrack = nil;
+            sg_paletteArtwork = nil;
             [NSNotificationCenter.defaultCenter postNotificationName:SGCoverPaletteDidChangeNotification object:nil];
         });
     });
@@ -104,8 +127,10 @@ void SGCoverPaletteOfferImage(UIImage *image) {
 
 void SGCoverPaletteReset(void) {
     sg_offered = NULL;
-    sg_offeredTrack = nil;
+    sg_offeredAt = 0;
     sg_paletteTrack = nil;
+    sg_paletteArtwork = nil;
+    sg_staleSince = 0;
     sg_retryAt = 0;
 }
 
