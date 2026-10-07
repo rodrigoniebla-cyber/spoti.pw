@@ -7,6 +7,9 @@
 // The colours of `image`, SGCoverPaletteColors of them; nil when it has no bitmap to read. Any thread.
 extern const NSInteger SGCoverPaletteColors;
 NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image);
+// The way SGCoverPaletteOfImage reads colours now (SGKeyVisualizerCoverColours and SGKeyVisualizerCoverDark
+// together), for a cache to tell colours read another way. Any thread.
+NSInteger SGCoverPaletteWay(void);
 
 // The playing track's cover colours, read from the artwork Spotify hands the system's now playing, off the
 // main thread and once per track (Spotify's artwork handler can wait on the main thread, so it is never

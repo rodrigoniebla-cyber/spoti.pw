@@ -3,7 +3,7 @@
 // on a dark cover does not become a colour; a purple and blue cover gives purples and blues; a grey cover greys.
 // Main colours: two big colours come back as those two, a black border is no colour of its own, one colour is
 // filled out with lighter and darker shades of it, a grey cover gets greys, and the main colour is first.
-// Either way everything is light enough for a bar on black.
+// Either way everything is light enough for a bar on black, unless dark colours are kept, when black stays black.
 //   cc -std=c11 -I tweak/Sources -x c harness/visualizer/palette_test.c -x c tweak/Sources/Shared/Visualizer/SGPalette.m -lm
 #include "Shared/Visualizer/SGPalette.h"
 #include <assert.h>
@@ -59,7 +59,7 @@ static void spots(void) {
     fill(16, 16, 32, 32, 30, 60, 220);
     fill(0, 16, 16, 32, 220, 200, 30);
     fill(12, 12, 20, 20, 160, 40, 200);
-    assert(SGPaletteSample(pixels, W, H, W * 4, 5, rgb) == 5);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 0, rgb) == 5);
     for (int i = 0; i < 15; i++) assert(rgb[i] >= 0 && rgb[i] <= 1);
     assert(away(hueOf(&rgb[3]), 0) < 20);
     assert(away(hueOf(&rgb[6]), 135) < 25);
@@ -72,7 +72,7 @@ static void spots(void) {
     fill(0, 0, W, H, 12, 12, 14);
     fill(4, 12, 28, 20, 240, 240, 240);
     for (int x = 4; x < 28; x += 4) fill(x, 9, x + 1, 10, 40, 200, 220);
-    assert(SGPaletteSample(pixels, W, H, W * 4, 5, rgb) == 5);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 0, rgb) == 5);
     for (int i = 0; i < 5; i++) {
         float h = hueOf(&rgb[i * 3]);
         assert(h < 0 || (h > 150 && h < 260));             // grey, or a touch of the cyan
@@ -85,7 +85,7 @@ static void spots(void) {
     fill(0, 0, W, 16, 90, 30, 140);
     fill(0, 16, W, H, 30, 40, 150);
     fill(29, 0, 32, 3, 255, 230, 0);
-    assert(SGPaletteSample(pixels, W, H, W * 4, 5, rgb) == 5);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 0, rgb) == 5);
     for (int i = 0; i < 5; i++) {
         float h = hueOf(&rgb[i * 3]);
         assert(h > 215 && h < 300);
@@ -94,29 +94,29 @@ static void spots(void) {
 
     // A grey cover: greys, no hue anywhere.
     fill(0, 0, W, H, 120, 120, 120);
-    assert(SGPaletteSample(pixels, W, H, W * 4, 4, rgb) == 4);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 4, 0, rgb) == 4);
     for (int i = 0; i < 4; i++) {
         assert(hueOf(&rgb[i * 3]) < 0);
         assert(rgb[i * 3] >= 0.5f && rgb[i * 3] <= 1);
     }
 
     // As many as asked for, up to eight.
-    assert(SGPaletteSample(pixels, W, H, W * 4, 12, rgb) == SGPaletteMaxColors);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 12, 0, rgb) == SGPaletteMaxColors);
 
     // Premultiplied pixels read the same as straight ones; transparent ones are not read.
     memset(pixels, 0, sizeof pixels);
     fill(0, 0, W, H, 200, 30, 30);
     for (int i = 0; i < W * H; i++) { pixels[i * 4] = (uint8_t)(pixels[i * 4] / 2); pixels[i * 4 + 1] /= 2; pixels[i * 4 + 2] /= 2; pixels[i * 4 + 3] = 128; }
-    assert(SGPaletteSample(pixels, W, H, W * 4, 2, rgb) == 2);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 2, 0, rgb) == 2);
     assert(away(hueOf(rgb), 0) < 12);
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 0;
-    assert(SGPaletteSample(pixels, W, H, W * 4, 2, rgb) == 0);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 2, 0, rgb) == 0);
 
     // Bad arguments.
-    assert(SGPaletteSample(NULL, W, H, W * 4, 4, rgb) == 0);
-    assert(SGPaletteSample(pixels, 0, H, W * 4, 4, rgb) == 0);
-    assert(SGPaletteSample(pixels, W, H, W * 4, 0, rgb) == 0);
-    assert(SGPaletteSample(pixels, W, H, 4, 4, rgb) == 0);
+    assert(SGPaletteSample(NULL, W, H, W * 4, 4, 0, rgb) == 0);
+    assert(SGPaletteSample(pixels, 0, H, W * 4, 4, 0, rgb) == 0);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 0, 0, rgb) == 0);
+    assert(SGPaletteSample(pixels, W, H, 4, 4, 0, rgb) == 0);
 }
 
 static void mainColours(void) {
@@ -127,7 +127,7 @@ static void mainColours(void) {
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 255;
     fill(4, 4, 20, 28, 200, 30, 30);
     fill(20, 4, 28, 28, 30, 60, 220);
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, rgb) == 4);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, 0, rgb) == 4);
     for (int i = 0; i < 12; i++) assert(rgb[i] >= 0 && rgb[i] <= 1);
     assert(away(hueOf(rgb), 0) < 12);                 // the dominant colour first, and red
     assert(hasHue(rgb, 4, 230, 14));                   // blue is in
@@ -142,7 +142,7 @@ static void mainColours(void) {
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 255;
     fill(4, 4, 12, 28, 200, 30, 30);
     fill(12, 4, 28, 28, 30, 60, 220);
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 3, rgb) == 3);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 3, 0, rgb) == 3);
     assert(away(hueOf(rgb), 230) < 14);
     assert(hasHue(rgb, 3, 0, 12));
 
@@ -150,7 +150,7 @@ static void mainColours(void) {
     memset(pixels, 0, sizeof pixels);
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 255;
     fill(0, 0, W, H, 30, 160, 60);
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, rgb) == 4);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, 0, rgb) == 4);
     assert(away(hueOf(rgb), 135) < 12);
     for (int i = 1; i < 4; i++) {
         assert(away(hueOf(&rgb[i * 3]), hueOf(rgb)) < 15);
@@ -160,7 +160,7 @@ static void mainColours(void) {
 
     // A grey cover: greys, no hue anywhere.
     fill(0, 0, W, H, 120, 120, 120);
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, rgb) == 4);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, 0, rgb) == 4);
     for (int i = 0; i < 4; i++) {
         assert(hueOf(&rgb[i * 3]) < 0);
         assert(rgb[i * 3] >= 0.4f && rgb[i * 3] <= 1);
@@ -175,7 +175,7 @@ static void mainColours(void) {
             case 4: r = xx; g = 0; b = c; break; default: r = c; g = 0; b = xx; }
         fill(x, 0, x + 1, H, byte(r), byte(g), byte(b));
     }
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, rgb) == 4);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 4, 0, rgb) == 4);
     for (int i = 0; i < 4; i++) for (int j = i + 1; j < 4; j++) assert(away(hueOf(&rgb[i * 3]), hueOf(&rgb[j * 3])) >= 40);
     // In ring order: hue grows from the first, round.
     float last = 0;
@@ -189,21 +189,49 @@ static void mainColours(void) {
     memset(pixels, 0, sizeof pixels);
     fill(0, 0, W, H, 200, 30, 30);
     for (int i = 0; i < W * H; i++) { pixels[i * 4] = (uint8_t)(pixels[i * 4] / 2); pixels[i * 4 + 1] /= 2; pixels[i * 4 + 2] /= 2; pixels[i * 4 + 3] = 128; }
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 2, rgb) == 2);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 2, 0, rgb) == 2);
     assert(away(hueOf(rgb), 0) < 10);
     for (int i = 0; i < W * H; i++) pixels[i * 4 + 3] = 0;
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 2, rgb) == 0);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 2, 0, rgb) == 0);
 
     // Bad arguments.
-    assert(SGPaletteCluster(NULL, W, H, W * 4, 4, rgb) == 0);
-    assert(SGPaletteCluster(pixels, 0, H, W * 4, 4, rgb) == 0);
-    assert(SGPaletteCluster(pixels, W, H, W * 4, 0, rgb) == 0);
-    assert(SGPaletteCluster(pixels, W, H, 4, 4, rgb) == 0);
+    assert(SGPaletteCluster(NULL, W, H, W * 4, 4, 0, rgb) == 0);
+    assert(SGPaletteCluster(pixels, 0, H, W * 4, 4, 0, rgb) == 0);
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 0, 0, rgb) == 0);
+    assert(SGPaletteCluster(pixels, W, H, 4, 4, 0, rgb) == 0);
+}
+
+// Dark colours kept: a black cover with a red block gives black and dark colours as they are, and Main
+// colours takes the black border as a colour of its own.
+static void dark(void) {
+    float rgb[SGPaletteMaxColors * 3];
+    memset(pixels, 0, sizeof pixels);
+    fill(0, 0, W, H, 5, 5, 5);
+    fill(16, 16, 32, 32, 120, 10, 10);
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 1, rgb) == 5);
+    assert(valueOf(&rgb[3]) < 0.12f);                   // top left is black, and stays black
+    assert(away(hueOf(&rgb[9]), 0) < 20);               // bottom right is the red
+    assert(valueOf(&rgb[9]) < 0.6f);                    // as dark as it is, not lifted
+    // Without it, the same cover is lifted to show on black.
+    assert(SGPaletteSample(pixels, W, H, W * 4, 5, 0, rgb) == 5);
+    for (int i = 0; i < 5; i++) assert(valueOf(&rgb[i * 3]) >= 0.5f);
+
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 3, 1, rgb) == 3);
+    int black = 0, red = 0;
+    for (int i = 0; i < 3; i++) {
+        if (valueOf(&rgb[i * 3]) < 0.12f) black = 1;
+        if (away(hueOf(&rgb[i * 3]), 0) < 20 && valueOf(&rgb[i * 3]) < 0.6f) red = 1;
+    }
+    assert(black && red);
+    // Without it, black is no colour.
+    assert(SGPaletteCluster(pixels, W, H, W * 4, 3, 0, rgb) == 3);
+    for (int i = 0; i < 3; i++) assert(valueOf(&rgb[i * 3]) >= 0.5f);
 }
 
 int main(void) {
     spots();
     mainColours();
-    puts("palette: spots (quarters in place, a dark cover with a detail, purple and blue, grey) and main colours (two colours, one hue, grey, a rainbow), premultiplied and bad input passed");
+    dark();
+    puts("palette: spots (quarters in place, a dark cover with a detail, purple and blue, grey) and main colours (two colours, one hue, grey, a rainbow), dark colours kept, premultiplied and bad input passed");
     return 0;
 }

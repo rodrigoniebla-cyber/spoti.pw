@@ -145,7 +145,7 @@ static NSInteger sg_paletteReading;
 
 static NSArray<UIColor *> *paletteFor(MPMediaItemArtwork *cover) {
     if (!cover) return nil;
-    NSInteger reading = SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots);
+    NSInteger reading = SGCoverPaletteWay();
     @synchronized (sg_artworkLock) {
         if (cover == sg_paletteOf && reading == sg_paletteReading && sg_paletteColors) return sg_paletteColors;
     }

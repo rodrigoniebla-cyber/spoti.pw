@@ -74,21 +74,21 @@ static const float kBlur = 0.16f;
 // more vivid, and more again for what lightness it gained, up to kMostVivid times.
 static const float kSpotLight = 0.64f, kSpotGrey = 0.025f, kVivid = 1.3f, kMostVivid = 2.2f;
 
-// A spot brought up to show as a bar on black, its hue kept.
-static void sampled(Lab c, float *rgb) {
+// A spot brought up to show as a bar on black, its hue kept; with `dark`, left as dark as it is.
+static void sampled(Lab c, int dark, float *rgb) {
     float gain = 1;
     if (chroma(c) > kSpotGrey) {
         gain = kVivid;
-        if (c.L < kSpotLight && c.L > 0.05f) gain *= sqrtf(kSpotLight / c.L);
+        if (!dark && c.L < kSpotLight && c.L > 0.05f) gain *= sqrtf(kSpotLight / c.L);
         if (gain > kMostVivid) gain = kMostVivid;
     }
-    if (c.L < kSpotLight) c.L = kSpotLight;
+    if (!dark && c.L < kSpotLight) c.L = kSpotLight;
     c.a *= gain;
     c.b *= gain;
     fitted(c, rgb);
 }
 
-int SGPaletteSample(const uint8_t *rgba, int width, int height, int stride, int count, float *rgb) {
+int SGPaletteSample(const uint8_t *rgba, int width, int height, int stride, int count, int dark, float *rgb) {
     if (!rgba || !rgb || width < 1 || height < 1 || stride < width * 4 || count < 1) return 0;
     if (count > SGPaletteMaxColors) count = SGPaletteMaxColors;
 
@@ -131,7 +131,7 @@ int SGPaletteSample(const uint8_t *rgba, int width, int height, int stride, int 
             mass += weight;
             for (int k = 0; k < 3; k++) sum[k] += weight * p[k];
         }
-        sampled(toLab((float)(sum[0] / mass), (float)(sum[1] / mass), (float)(sum[2] / mass)), &rgb[c * 3]);
+        sampled(toLab((float)(sum[0] / mass), (float)(sum[1] / mass), (float)(sum[2] / mass)), dark, &rgb[c * 3]);
     }
     free(pixels);
     return count;
@@ -151,9 +151,9 @@ static const float kLightFloor = 0.66f, kChromaFloor = 0.1f, kGreyChroma = 0.035
 // The shades filling out a cover with fewer colours than asked for: lightness steps from the main one.
 static const float kShadeStep = 0.1f;
 
-// A cluster brought up to show as a bar on black, keeping its hue.
-static Lab brighten(Lab c) {
-    if (c.L < kLightFloor) c.L = kLightFloor;
+// A cluster brought up to show as a bar on black, keeping its hue; with `dark`, only made vivid enough.
+static Lab brighten(Lab c, int dark) {
+    if (!dark && c.L < kLightFloor) c.L = kLightFloor;
     float C = chroma(c);
     if (C > kGreyChroma && C < kChromaFloor) {
         c.a *= kChromaFloor / C;
@@ -162,7 +162,7 @@ static Lab brighten(Lab c) {
     return c;
 }
 
-int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int count, float *rgb) {
+int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int count, int dark, float *rgb) {
     if (!rgba || !rgb || width < 1 || height < 1 || stride < width * 4 || count < 1) return 0;
     if (count > SGPaletteMaxColors) count = SGPaletteMaxColors;
 
@@ -246,12 +246,12 @@ int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int
     while (got < count) {
         int pick = -1;
         for (int c = 0; c < k; c++) {
-            if (used[c] || mass[c] <= 0 || centres[c].L < kDarkest) continue;
+            if (used[c] || mass[c] <= 0 || (!dark && centres[c].L < kDarkest)) continue;
             if (pick < 0 || mass[c] > mass[pick]) pick = c;
         }
         if (pick < 0) break;
         used[pick] = 1;
-        Lab colour = brighten(centres[pick]);
+        Lab colour = brighten(centres[pick], dark);
         int close = 0;
         for (int t = 0; t < got; t++) if (distance(taken[t], colour) < kApart) close = 1;
         if (!close) taken[got++] = colour;
@@ -259,7 +259,7 @@ int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int
     if (!got) {
         // Nothing but dark: a grey as light as the picture is, lifted.
         float L = (float)(lightness / n);
-        taken[got++] = brighten((Lab){L, 0, 0});
+        taken[got++] = brighten((Lab){L, 0, 0}, dark);
     }
     // Shades of the first, lighter and darker by turns, for a cover with fewer colours than asked for.
     for (int s = got; s < count; s++) {
@@ -267,7 +267,8 @@ int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int
         Lab shade = taken[0];
         shade.L += kShadeStep * stepIndex * ((s - got) % 2 ? -1 : 1);
         if (shade.L > 0.97f) shade.L -= 2 * kShadeStep * stepIndex;
-        if (shade.L < kLightFloor - 0.1f) shade.L = kLightFloor - 0.1f;
+        float least = dark ? 0.05f : kLightFloor - 0.1f;
+        if (shade.L < least) shade.L = least;
         taken[s] = shade;
     }
 

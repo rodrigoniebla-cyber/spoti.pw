@@ -12,6 +12,10 @@ NSNotificationName const SGCoverPaletteDidChangeNotification = @"spotifyglass.co
 // Enough pixels for a cover's colours; more would only cost.
 enum { kSide = 32 };
 
+NSInteger SGCoverPaletteWay(void) {
+    return SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots) * 2 + (SGFlag(SGKeyVisualizerCoverDark, NO) ? 1 : 0);
+}
+
 NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image) {
     if (!image.CGImage) return nil;
     uint8_t pixels[kSide * kSide * 4] = {0};
@@ -23,8 +27,9 @@ NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image) {
     CGContextDrawImage(context, CGRectMake(0, 0, kSide, kSide), image.CGImage);
     CGContextRelease(context);
     float rgb[SGPaletteMaxColors * 3];
-    BOOL main = SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots) == SGVisualizerCoverColoursMain;
-    int count = (main ? SGPaletteCluster : SGPaletteSample)(pixels, kSide, kSide, kSide * 4, (int)SGCoverPaletteColors, rgb);
+    NSInteger way = SGCoverPaletteWay();
+    BOOL main = way / 2 == SGVisualizerCoverColoursMain;
+    int count = (main ? SGPaletteCluster : SGPaletteSample)(pixels, kSide, kSide, kSide * 4, (int)SGCoverPaletteColors, (int)(way % 2), rgb);
     if (count < 1) return nil;
     NSMutableArray<UIColor *> *colors = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
     for (int i = 0; i < count; i++) [colors addObject:[UIColor colorWithRed:rgb[i * 3] green:rgb[i * 3 + 1] blue:rgb[i * 3 + 2] alpha:1]];

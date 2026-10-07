@@ -36,6 +36,8 @@
 #define SGKeyVisualizerColor @"spotifyglass.visualizer.color"         // an SGVisualizerColor
 // How the Cover gradient reads the cover's colours, an SGVisualizerCoverColours.
 #define SGKeyVisualizerCoverColours @"spotifyglass.visualizer.coverColours"
+// The cover's dark colours, black included, kept as they are rather than lightened. Off until switched on.
+#define SGKeyVisualizerCoverDark @"spotifyglass.visualizer.coverDark"
 #define SGKeyVisualizerMirror @"spotifyglass.visualizer.mirror"       // on until switched off
 
 typedef NS_ENUM(NSInteger, SGVisualizerStyle) {

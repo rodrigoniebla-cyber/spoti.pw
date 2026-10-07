@@ -14,7 +14,9 @@
 // out with lighter and darker shades of its main one. They come back in a ring order: the main colour first,
 // then the others by how far their hue is round from it.
 //
-// Either way each colour is lifted to be light enough to show as a bar on black, keeping its hue.
+// Either way each colour is lifted to be light enough to show as a bar on black, keeping its hue, unless
+// `dark` is set: then the colours are as dark as they are on the cover, black included, and Main colours
+// takes dark clusters as well as light ones.
 #pragma once
 #include <stdint.h>
 
@@ -23,5 +25,5 @@ enum { SGPaletteMaxColors = 8 };
 // `rgba` is width x height pixels of 8 bit channels, premultiplied or not, rows `stride` bytes apart, the
 // first row the top. Each writes `count` (1...SGPaletteMaxColors) colours as three floats each, 0...1, into
 // `rgb` and returns how many it wrote: `count`, or 0 for an empty picture or bad arguments.
-int SGPaletteSample(const uint8_t *rgba, int width, int height, int stride, int count, float *rgb);
-int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int count, float *rgb);
+int SGPaletteSample(const uint8_t *rgba, int width, int height, int stride, int count, int dark, float *rgb);
+int SGPaletteCluster(const uint8_t *rgba, int width, int height, int stride, int count, int dark, float *rgb);

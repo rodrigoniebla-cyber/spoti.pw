@@ -105,6 +105,12 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
         changed();
     };
     reading.visible = ^BOOL { return SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent) == SGVisualizerColorCover; };
+    SGModRow *dark = SGOptionRow(@"Dark colours", @"Keeps the cover's darks and black as they are", SGKeyVisualizerCoverDark);
+    dark.changed = ^(BOOL on) {
+        SGCoverPaletteReset();
+        changed();
+    };
+    dark.visible = reading.visible;
     SGModRow *gradient = SGChoiceRow(@"Gradient", nil, SGKeyVisualizerGradient, @[@"Along each bar", @"Around the ring", @"Repeating", @"Bar by bar"],
                                      SGVisualizerGradientAlong);
     gradient.choiceNotes = @[@"Every bar goes through the colours from the inside out", @"Once round the whole ring",
@@ -124,7 +130,7 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
     rotation.chosen = ^(NSInteger index) { changed(); };
     NSArray<NSArray<SGModRow *> *> *groups = @[@[likeHaptics, strength, follows, bass, response],
                                                @[bars, width, height, style, mirror, peaks, rotation],
-                                               @[color, reading, gradient]];
+                                               @[color, reading, dark, gradient]];
     if (waitsOnKey) for (NSArray<SGModRow *> *group in groups) for (SGModRow *row in group) SGWaitsOn(row, waitsOnKey, NO);
     return @[
         SGNotedSection(@"Sound", groups[0], @"Strength and Follows work as Music Haptics' do. Bass area is how much of the ring the "
@@ -132,7 +138,8 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
         SGNotedSection(@"Shape", groups[1], @"Peaks and Rotation are the player's only."),
         SGNotedSection(@"Colour", groups[2], @"Cover gradient takes its colours from the cover on screen, lightened to show on "
                                               "black. Spots reads the cover blurred, so a small detail never becomes a colour; Main "
-                                              "colours picks out the cover's own colours, the vivid ones first."),
+                                              "colours picks out the cover's own colours, the vivid ones first. Dark colours keeps a dark cover dark, black "
+                                              "included, so some bars may barely show on black."),
     ];
 }
 
