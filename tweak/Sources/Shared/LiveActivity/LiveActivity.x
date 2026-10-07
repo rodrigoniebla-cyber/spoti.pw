@@ -28,7 +28,8 @@ API_AVAILABLE(ios(17.0))
          translation:(NSString *)translation tint:(NSInteger)tint progress:(double)progress
           trackStart:(NSDate *)trackStart trackEnd:(NSDate *)trackEnd
                 bars:(NSString *)bars barColours:(NSArray<NSNumber *> *)barColours coverGroup:(NSString *)coverGroup
-            coverKey:(NSString *)coverKey coverThumbnail:(NSData *)coverThumbnail duration:(double)duration;
+            coverKey:(NSString *)coverKey coverThumbnail:(NSData *)coverThumbnail duration:(double)duration
+           backlight:(BOOL)backlight;
 + (void)end;
 @end
 
@@ -407,6 +408,7 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
     NSArray<NSNumber *> *barColours = coverReady ? sg_barColours ?: @[] : @[];
     NSString *translation = view == SGLiveActivityLyrics && ![line isEqualToString:@"♪"] ? translationOf(trackID) : @"";
     NSInteger tint = coverTint();
+    BOOL backlight = playerView && SGFlag(SGKeyVisualizerBacklight, NO);
     // The bar runs on its own from the track's start to its end while it plays, so only a seek, a pause or a
     // new track sends a new state; paused, it stands where it is.
     double duration = [state respondsToSelector:@selector(duration)] ? state.duration : 0;
@@ -419,7 +421,7 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
         @(tab).stringValue, title, artist, shuffle ? @"1" : @"0", @(repeatMode).stringValue,
         @((long long)sleepEnd.timeIntervalSince1970).stringValue, endOfTrack ? @"1" : @"0", liked ? @"1" : @"0", translation, @(tint).stringValue,
         paused ? @(lround(progress * 100)).stringValue : @(lround(trackStart.timeIntervalSince1970 / 2)).stringValue,
-        bars, coverKey, @(coverThumbnail.length).stringValue, [barColours componentsJoinedByString:@","], nil];
+        bars, coverKey, @(coverThumbnail.length).stringValue, [barColours componentsJoinedByString:@","], backlight ? @"1" : @"0", nil];
     for (NSUInteger i = 0; i < titles.count; i++) [parts addObject:[NSString stringWithFormat:@"%@\t%@\t%@", titles[i], artists[i], uris[i]]];
     send([parts componentsJoinedByString:@"\n"], ^{
         [SGLiveActivityBridge showWithView:view paused:paused line:line nextLine:next titles:titles artists:artists uris:uris
@@ -427,7 +429,7 @@ static void tick(void) API_AVAILABLE(ios(17.0)) {
                                    timerEnd:sleepEnd timerEndOfTrack:endOfTrack liked:liked
                                 translation:translation tint:tint progress:progress trackStart:trackStart trackEnd:trackEnd
                                        bars:bars barColours:barColours coverGroup:coverGroup coverKey:coverKey
-                             coverThumbnail:coverThumbnail duration:duration];
+                             coverThumbnail:coverThumbnail duration:duration backlight:backlight];
     });
 }
 

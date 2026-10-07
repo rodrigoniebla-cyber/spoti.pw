@@ -72,7 +72,7 @@ public final class SGLiveActivityBridge: NSObject {
                                   timerEnd: Date?, timerEndOfTrack: Bool, liked: Bool,
                                   translation: String, tint: Int, progress: Double, trackStart: Date?, trackEnd: Date?,
                                   bars: String, barColours: [Int], coverGroup: String, coverKey: String,
-                                  coverThumbnail: Data?, duration: Double) {
+                                  coverThumbnail: Data?, duration: Double, backlight: Bool) {
         let tracks = titles.indices.map {
             SGLyricsAttributes.Track(title: titles[$0], artist: artists[$0], uri: uris[$0])
         }
@@ -84,7 +84,7 @@ public final class SGLiveActivityBridge: NSObject {
             translation: translation, tint: tint, progress: progress, trackStart: trackStart, trackEnd: trackEnd,
             bars: bars.isEmpty ? nil : bars, barColours: barColours.isEmpty ? nil : barColours,
             coverGroup: coverGroup.isEmpty ? nil : coverGroup, coverKey: coverKey.isEmpty ? nil : coverKey,
-            coverThumbnail: coverThumbnail, duration: duration > 0 ? duration : nil)
+            coverThumbnail: coverThumbnail, duration: duration > 0 ? duration : nil, backlight: backlight ? true : nil)
         // ActivityKit refuses a state over 4 KB: the cover carried in it goes first, the file in the App Group
         // being the cover the widget reads when it can.
         if state.coverThumbnail != nil, let encoded = try? JSONEncoder().encode(state), encoded.count > maxStateBytes {

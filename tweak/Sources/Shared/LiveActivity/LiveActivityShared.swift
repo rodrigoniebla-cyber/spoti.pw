@@ -62,6 +62,8 @@ struct SGLyricsAttributes: ActivityAttributes {
         var coverThumbnail: Data?
         // The track's length in seconds, for the times by the bar and for a tap on it to seek to.
         var duration: Double?
+        // The visualizer's Backlight: a glow behind the bars, white behind dark ones and black behind light ones.
+        var backlight: Bool?
     }
 }
 

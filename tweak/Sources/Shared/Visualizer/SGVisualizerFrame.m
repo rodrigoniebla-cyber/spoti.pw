@@ -52,6 +52,20 @@ UIImage *SGVisualizerDrawFrame(CGFloat side, UIImage *cover, UIImage *backdrop, 
         CGFloat inner = radius + side * 0.012;
         CGFloat reach = (outer - inner) * SGVisualizerHeightFactor();
 
+        // The Backlight, as the player's ring lays it: solid to past the bars' middle, gone by the ring's edge.
+        UIColor *glow = SGVisualizerBacklightColour(colours ?: @[colour == SGVisualizerColorWhite ? UIColor.whiteColor
+                                                                                              : (accent ?: UIColor.whiteColor)]);
+        if (glow) {
+            CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+            CGFloat solid = inner + reach * 0.6, edge = outer + side * 0.04;
+            CGFloat locations[] = {0, solid / edge, 1};
+            CFArrayRef glowColours = (__bridge CFArrayRef)@[(id)glow.CGColor, (id)glow.CGColor, (id)[glow colorWithAlphaComponent:0].CGColor];
+            CGGradientRef gradient = CGGradientCreateWithColors(space, glowColours, locations);
+            CGContextDrawRadialGradient(context, gradient, centre, 0, centre, edge, 0);
+            CGGradientRelease(gradient);
+            CGColorSpaceRelease(space);
+        }
+
         // The cover, a circle.
         CGRect coverBox = CGRectMake(centre.x - radius, centre.y - radius, radius * 2, radius * 2);
         CGContextSaveGState(context);

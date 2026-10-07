@@ -157,6 +157,19 @@ private func rgb(_ value: Int) -> Color {
     Color(red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
 }
 
+// How light a 0xRRGGBB colour is, 0...1, as the app's ring weighs it (SGVisualizerLuminance).
+private func luminance(_ value: Int) -> Double {
+    0.2126 * Double((value >> 16) & 0xFF) / 255 + 0.7152 * Double((value >> 8) & 0xFF) / 255 + 0.0722 * Double(value & 0xFF) / 255
+}
+
+// The Backlight behind bars of these colours, as the app's ring picks it (SGVisualizerBacklightColour): white
+// behind dark bars, black behind light ones. A cover's tint stands in when the colours are not known yet.
+private func backlightColour(_ state: State) -> Color {
+    let values = state.barColours ?? (state.tint >= 0 ? [state.tint] : [])
+    let light = values.isEmpty ? 1 : values.map(luminance).reduce(0, +) / Double(values.count)
+    return light < 0.45 ? Color.white.opacity(0.42) : Color.black.opacity(0.62)
+}
+
 // The cover: the app's file in the App Group when this extension may open the group, else the small picture
 // carried in the state.
 private func coverImage(_ state: State) -> UIImage? {
@@ -187,6 +200,17 @@ private struct CoverRing: View {
             ? AnyShapeStyle(LinearGradient(colors: colours, startPoint: .bottom, endPoint: .top))
             : AnyShapeStyle(colours.first ?? coverColour(state, dim: false))
         ZStack {
+            if state.backlight == true {
+                let glow = backlightColour(state)
+                let solid = (inner + 2 + reach * 0.6) / (size / 2)
+                Circle()
+                    .fill(RadialGradient(gradient: Gradient(stops: [
+                        .init(color: glow, location: 0),
+                        .init(color: glow, location: min(0.95, solid)),
+                        .init(color: glow.opacity(0), location: 1),
+                    ]), center: .center, startRadius: 0, endRadius: size / 2))
+                    .frame(width: size, height: size)
+            }
             ForEach(0..<count, id: \.self) { index in
                 let band = index < bands ? index : count - 1 - index
                 let level = band < heard.count ? heard[band] : 0

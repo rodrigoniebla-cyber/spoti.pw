@@ -199,7 +199,9 @@ Shared:
                   each quarter, so only colours that cover a good part of it come back, and Main colours is k-means
                   in OKLab weighted by how vivid each pixel is, black left out; either way lightened to show on black,
                   unless the Dark colours switch keeps them as dark as they are, black included, tested in
-                  harness/visualizer/palette_test.c), a gradient colour laid along
+                  harness/visualizer/palette_test.c; the Backlight switch lays a soft radial glow under the bars,
+                  white behind dark ones and black behind light ones by their mean luminance, in the player's ring,
+                  the lock screen's frame and the Live Activity's ring alike), a gradient colour laid along
                   every bar from its darkest colour inside to its lightest at the tip (a radial gradient the bars mask),
                   once round the ring, there and back four times, or bar by bar (a shape layer a colour), fading to the
                   next track's on a display link run the lyrics'

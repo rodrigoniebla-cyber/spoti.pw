@@ -120,6 +120,8 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
         NSInteger colour = SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent);
         return colour == SGVisualizerColorSpectrum || colour == SGVisualizerColorCover;
     };
+    SGModRow *backlight = SGOptionRow(@"Backlight", @"A glow behind the bars, white or black, so they stand out", SGKeyVisualizerBacklight);
+    backlight.changed = ^(BOOL on) { changed(); };
     SGModRow *mirror = SGSwitchRow(@"Mirror", @"Each side the other's reflection", SGKeyVisualizerMirror);
     mirror.changed = ^(BOOL on) { changed(); };
     SGModRow *peaks = SGOptionRow(@"Peaks", @"A cap at each bar's peak that falls slowly", SGKeyVisualizerPeaks);
@@ -130,7 +132,7 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
     rotation.chosen = ^(NSInteger index) { changed(); };
     NSArray<NSArray<SGModRow *> *> *groups = @[@[likeHaptics, strength, follows, bass, response],
                                                @[bars, width, height, style, mirror, peaks, rotation],
-                                               @[color, reading, dark, gradient]];
+                                               @[color, reading, dark, gradient, backlight]];
     if (waitsOnKey) for (NSArray<SGModRow *> *group in groups) for (SGModRow *row in group) SGWaitsOn(row, waitsOnKey, NO);
     return @[
         SGNotedSection(@"Sound", groups[0], @"Strength and Follows work as Music Haptics' do. Bass area is how much of the ring the "
@@ -139,7 +141,8 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
         SGNotedSection(@"Colour", groups[2], @"Cover gradient takes its colours from the cover on screen, lightened to show on "
                                               "black. Spots reads the cover blurred, so a small detail never becomes a colour; Main "
                                               "colours picks out the cover's own colours, the vivid ones first. Dark colours keeps a dark cover dark, black "
-                                              "included, so some bars may barely show on black."),
+                                              "included. Backlight lays a soft glow behind the bars, white when they are dark and "
+                                              "black when they are light, so they stand out from what is behind them."),
     ];
 }
 

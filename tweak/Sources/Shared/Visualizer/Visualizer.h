@@ -38,6 +38,9 @@
 #define SGKeyVisualizerCoverColours @"spotifyglass.visualizer.coverColours"
 // The cover's dark colours, black included, kept as they are rather than lightened. Off until switched on.
 #define SGKeyVisualizerCoverDark @"spotifyglass.visualizer.coverDark"
+// A soft glow behind the bars, white behind dark bars and black behind light ones, so they never sink into
+// what is behind them. Off until switched on.
+#define SGKeyVisualizerBacklight @"spotifyglass.visualizer.backlight"
 #define SGKeyVisualizerMirror @"spotifyglass.visualizer.mirror"       // on until switched off
 
 typedef NS_ENUM(NSInteger, SGVisualizerStyle) {

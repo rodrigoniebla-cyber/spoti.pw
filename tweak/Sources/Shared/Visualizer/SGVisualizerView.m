@@ -45,6 +45,9 @@ static void showing(NSInteger change) {
     // Alternating's layers, one a colour; the radial gradient's span, inside to tip, as last laid.
     NSArray<CAShapeLayer *> *_alternates;
     CGFloat _radialFrom, _radialTo;
+    // The Backlight: a radial glow under everything, and how far out it is solid, as last laid.
+    CAGradientLayer *_backlight;
+    CGFloat _backlightSolid;
 }
 
 // Shown as far as its ancestors go: none hidden or faded out (a queue cell's ring, a closed player's).
@@ -66,6 +69,12 @@ static BOOL onScreen(UIView *view) {
     _spectrum.type = kCAGradientLayerConic;
     _spectrum.startPoint = CGPointMake(0.5, 0.5);
     _spectrum.endPoint = CGPointMake(0.5, 0);
+    _backlight = [CAGradientLayer layer];
+    _backlight.type = kCAGradientLayerRadial;
+    _backlight.startPoint = CGPointMake(0.5, 0.5);
+    _backlight.endPoint = CGPointMake(1, 1);
+    _backlight.hidden = YES;
+    [self.layer addSublayer:_backlight];
     [self.layer addSublayer:_shape];
     [self readSettings];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(readSettings) name:SGVisualizerSettingsDidChangeNotification object:nil];
@@ -179,6 +188,26 @@ static BOOL onScreen(UIView *view) {
         _shape.strokeColor = color.CGColor;
         _shape.fillColor = _style == SGVisualizerStyleDots ? color.CGColor : nil;
     }
+    UIColor *glow = SGVisualizerBacklightColour(colours ?: @[color]);
+    _backlight.hidden = glow == nil;
+    if (glow) {
+        // Solid from the middle (under the cover) to past the bars' middle, fading out by the ring's edge.
+        _backlight.colors = @[(id)glow.CGColor, (id)glow.CGColor, (id)[glow colorWithAlphaComponent:0].CGColor];
+        [self placeBacklight:_backlightSolid force:YES];
+    }
+    [CATransaction commit];
+}
+
+// The Backlight's solid part reaching `solid` points out from the centre, then fading to nothing at the edge
+// of the ring's square; laid again only when that moves by more than a point.
+- (void)placeBacklight:(CGFloat)solid force:(BOOL)force {
+    if (!force && fabs(solid - _backlightSolid) < 1) return;
+    _backlightSolid = solid;
+    CGFloat half = MIN(self.bounds.size.width, self.bounds.size.height) / 2;
+    if (half <= 0 || _backlight.hidden) return;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    _backlight.locations = @[@0, @(MIN(0.95, MAX(0.05, solid / half))), @1];
     [CATransaction commit];
 }
 
@@ -230,6 +259,7 @@ static BOOL onScreen(UIView *view) {
     [CATransaction setDisableActions:YES];
     _shape.frame = self.bounds;
     _spectrum.frame = self.bounds;
+    _backlight.frame = self.bounds;
     for (CAShapeLayer *layer in _alternates) layer.frame = self.bounds;
     [CATransaction commit];
 }
@@ -335,6 +365,7 @@ static BOOL onScreen(UIView *view) {
     UIBezierPath *all[SGPaletteMaxColors + 1];
     for (NSUInteger p = 0; p < paths; p++) all[p] = [UIBezierPath bezierPath];
     if (_spectrum.superlayer && _spectrum.type == kCAGradientLayerRadial) [self placeRadialFrom:inner to:inner + reach force:NO];
+    if (!_backlight.hidden) [self placeBacklight:inner + reach * 0.6 force:NO];
     for (NSInteger i = 0; i < count; i++) {
         UIBezierPath *path = all[(NSUInteger)i % paths];
         // Mirrored, the lowest band is at the top and the highest meets itself at the bottom.

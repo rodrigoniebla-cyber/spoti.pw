@@ -187,6 +187,23 @@ static CGFloat luminance(UIColor *color) {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+const CGFloat SGVisualizerBacklightSplit = 0.45;
+
+CGFloat SGVisualizerLuminance(NSArray<UIColor *> *colours) {
+    if (!colours.count) return 1;
+    CGFloat sum = 0;
+    for (UIColor *colour in colours) sum += luminance(colour);
+    return sum / colours.count;
+}
+
+UIColor *SGVisualizerBacklightColour(NSArray<UIColor *> *colours) {
+    if (!SGFlag(SGKeyVisualizerBacklight, NO)) return nil;
+    // White lifts what is behind dark bars less than black sinks what is behind light ones, to the eye, so
+    // black is laid on stronger.
+    return SGVisualizerLuminance(colours) < SGVisualizerBacklightSplit ? [UIColor colorWithWhite:1 alpha:0.42]
+                                                                       : [UIColor colorWithWhite:0 alpha:0.62];
+}
+
 NSArray<UIColor *> *SGVisualizerGradientStops(NSArray<UIColor *> *colours, NSInteger gradient, BOOL mirror, BOOL spectrum) {
     if (!colours.count) return nil;
     if (colours.count == 1) return @[colours[0], colours[0]];

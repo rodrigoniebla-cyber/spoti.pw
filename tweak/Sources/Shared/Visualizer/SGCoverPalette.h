@@ -41,5 +41,11 @@ NSArray<UIColor *> *SGVisualizerSpectrumColours(void);
 // the inside and lightest at the tip (Spectrum's hues in their order); round the ring once (mirrored or not),
 // or there and back `repeats` times. Alternating takes the colours as they are.
 NSArray<UIColor *> *SGVisualizerGradientStops(NSArray<UIColor *> *colours, NSInteger gradient, BOOL mirror, BOOL spectrum);
+// The Backlight's colour behind bars drawn in `colours` (SGKeyVisualizerBacklight): white when they are dark
+// on the whole, black when they are light, at the strength it is drawn at. nil while the switch is off.
+UIColor *SGVisualizerBacklightColour(NSArray<UIColor *> *colours);
+// The colours' mean luminance, 0...1, and the line SGVisualizerBacklightColour draws between black and white.
+CGFloat SGVisualizerLuminance(NSArray<UIColor *> *colours);
+extern const CGFloat SGVisualizerBacklightSplit;
 // How many times Repeating goes there and back round the ring.
 extern const NSInteger SGVisualizerRepeats;
