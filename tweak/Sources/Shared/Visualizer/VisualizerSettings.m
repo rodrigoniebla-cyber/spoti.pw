@@ -4,6 +4,7 @@
 #import "Core/SGCore.h"
 #import "Settings/SGModPage.h"
 #import "Shared/Haptics/Haptics.h"
+#import "SGCoverPalette.h"
 #import "Visualizer.h"
 
 NSNotificationName const SGVisualizerSettingsDidChangeNotification = @"spotifyglass.visualizerChanged";
@@ -96,6 +97,14 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
     SGModRow *color = SGChoiceRow(@"Colour", nil, SGKeyVisualizerColor, @[@"Accent", @"White", @"Spectrum", @"Cover gradient"], SGVisualizerColorAccent);
     color.choiceNotes = @[@"The look's accent colour", @"Plain white", @"Every hue, round the ring", @"A gradient of the cover's own colours, changing with each song"];
     color.chosen = ^(NSInteger index) { changed(); };
+    SGModRow *reading = SGChoiceRow(@"Cover colours", nil, SGKeyVisualizerCoverColours, @[@"Spots", @"Main colours"], SGVisualizerCoverColoursSpots);
+    reading.choiceNotes = @[@"The blurred cover at its centre and each quarter: the colours it is mostly made of",
+                            @"The cover's main colours over the whole of it, vivid ones first, even small"];
+    reading.chosen = ^(NSInteger index) {
+        SGCoverPaletteReset();
+        changed();
+    };
+    reading.visible = ^BOOL { return SGInt(SGKeyVisualizerColor, SGVisualizerColorAccent) == SGVisualizerColorCover; };
     SGModRow *gradient = SGChoiceRow(@"Gradient", nil, SGKeyVisualizerGradient, @[@"Along each bar", @"Around the ring", @"Repeating", @"Bar by bar"],
                                      SGVisualizerGradientAlong);
     gradient.choiceNotes = @[@"Every bar goes through the colours from the inside out", @"Once round the whole ring",
@@ -115,14 +124,15 @@ NSArray<SGModSection *> *SGVisualizerSections(NSString *waitsOnKey) {
     rotation.chosen = ^(NSInteger index) { changed(); };
     NSArray<NSArray<SGModRow *> *> *groups = @[@[likeHaptics, strength, follows, bass, response],
                                                @[bars, width, height, style, mirror, peaks, rotation],
-                                               @[color, gradient]];
+                                               @[color, reading, gradient]];
     if (waitsOnKey) for (NSArray<SGModRow *> *group in groups) for (SGModRow *row in group) SGWaitsOn(row, waitsOnKey, NO);
     return @[
         SGNotedSection(@"Sound", groups[0], @"Strength and Follows work as Music Haptics' do. Bass area is how much of the ring the "
                                              "lowest notes, 20 to 100 Hz, get; the rest runs from 100 Hz up."),
         SGNotedSection(@"Shape", groups[1], @"Peaks and Rotation are the player's only."),
-        SGNotedSection(@"Colour", groups[2], @"Cover gradient takes its colours from the cover on screen, the main colours in it, "
-                                              "lightened to show on black."),
+        SGNotedSection(@"Colour", groups[2], @"Cover gradient takes its colours from the cover on screen, lightened to show on "
+                                              "black. Spots reads the cover blurred, so a small detail never becomes a colour; Main "
+                                              "colours picks out the cover's own colours, the vivid ones first."),
     ];
 }
 

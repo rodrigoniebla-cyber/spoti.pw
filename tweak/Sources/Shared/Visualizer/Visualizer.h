@@ -34,6 +34,8 @@
 #define SGKeyVisualizerRotation @"spotifyglass.visualizer.rotation"
 #define SGKeyVisualizerStyle @"spotifyglass.visualizer.style"         // an SGVisualizerStyle
 #define SGKeyVisualizerColor @"spotifyglass.visualizer.color"         // an SGVisualizerColor
+// How the Cover gradient reads the cover's colours, an SGVisualizerCoverColours.
+#define SGKeyVisualizerCoverColours @"spotifyglass.visualizer.coverColours"
 #define SGKeyVisualizerMirror @"spotifyglass.visualizer.mirror"       // on until switched off
 
 typedef NS_ENUM(NSInteger, SGVisualizerStyle) {
@@ -47,6 +49,11 @@ typedef NS_ENUM(NSInteger, SGVisualizerColor) {
     SGVisualizerColorWhite,
     SGVisualizerColorSpectrum,     // a hue all the way round
     SGVisualizerColorCover,        // a gradient through the playing cover's main colours (SGCoverPalette.h)
+};
+
+typedef NS_ENUM(NSInteger, SGVisualizerCoverColours) {
+    SGVisualizerCoverColoursSpots = 0,   // the blurred cover read at its centre and quarters (SGPalette.h) (unset)
+    SGVisualizerCoverColoursMain,        // the cover's main colours, clustered, vivid ones first
 };
 
 typedef NS_ENUM(NSInteger, SGVisualizerGradient) {

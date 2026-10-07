@@ -23,7 +23,8 @@ NSArray<UIColor *> *SGCoverPaletteOfImage(UIImage *image) {
     CGContextDrawImage(context, CGRectMake(0, 0, kSide, kSide), image.CGImage);
     CGContextRelease(context);
     float rgb[SGPaletteMaxColors * 3];
-    int count = SGPaletteExtract(pixels, kSide, kSide, kSide * 4, (int)SGCoverPaletteColors, rgb);
+    BOOL main = SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots) == SGVisualizerCoverColoursMain;
+    int count = (main ? SGPaletteCluster : SGPaletteSample)(pixels, kSide, kSide, kSide * 4, (int)SGCoverPaletteColors, rgb);
     if (count < 1) return nil;
     NSMutableArray<UIColor *> *colors = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
     for (int i = 0; i < count; i++) [colors addObject:[UIColor colorWithRed:rgb[i * 3] green:rgb[i * 3 + 1] blue:rgb[i * 3 + 2] alpha:1]];
@@ -38,6 +39,8 @@ static NSString *sg_offeredTrack;
 static BOOL sg_reading;
 static NSArray<UIColor *> *sg_palette;
 static CFTimeInterval sg_retryAt;
+// The cover last offered, so the same one again does nothing.
+static const void *sg_offered;
 
 NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void) {
     NSString *track = SGKaraokePlayingTrack();
@@ -79,20 +82,26 @@ static dispatch_queue_t paletteQueue(void) {
 }
 
 void SGCoverPaletteOfferImage(UIImage *image) {
-    static const void *offered;
-    if (!image.CGImage || (__bridge const void *)image == offered) return;
-    offered = (__bridge const void *)image;
+    if (!image.CGImage || (__bridge const void *)image == sg_offered) return;
+    sg_offered = (__bridge const void *)image;
     NSString *track = SGKaraokePlayingTrack();
     dispatch_async(paletteQueue(), ^{
         NSArray<UIColor *> *colors = SGCoverPaletteOfImage(image);
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!colors || offered != (__bridge const void *)image) return;
+            if (!colors || sg_offered != (__bridge const void *)image) return;
             sg_offeredTrack = track;
             sg_paletteTrack = track;
             sg_palette = colors;
             [NSNotificationCenter.defaultCenter postNotificationName:SGCoverPaletteDidChangeNotification object:nil];
         });
     });
+}
+
+void SGCoverPaletteReset(void) {
+    sg_offered = NULL;
+    sg_offeredTrack = nil;
+    sg_paletteTrack = nil;
+    sg_retryAt = 0;
 }
 
 #pragma mark - round the ring

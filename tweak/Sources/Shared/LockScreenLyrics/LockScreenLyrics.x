@@ -137,18 +137,22 @@ static UIImage *coverFor(MPMediaItemArtwork *cover) {
     return image;
 }
 
-// The cover's colours for the Cover gradient, worked out once per artwork object, on the frame queue.
+// The cover's colours for the Cover gradient, worked out once per artwork object and way of reading them, on
+// the frame queue.
 static __weak MPMediaItemArtwork *sg_paletteOf;
 static NSArray<UIColor *> *sg_paletteColors;
+static NSInteger sg_paletteReading;
 
 static NSArray<UIColor *> *paletteFor(MPMediaItemArtwork *cover) {
     if (!cover) return nil;
+    NSInteger reading = SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots);
     @synchronized (sg_artworkLock) {
-        if (cover == sg_paletteOf && sg_paletteColors) return sg_paletteColors;
+        if (cover == sg_paletteOf && reading == sg_paletteReading && sg_paletteColors) return sg_paletteColors;
     }
     NSArray<UIColor *> *colors = SGCoverPaletteOfImage(coverFor(cover));
     @synchronized (sg_artworkLock) {
         sg_paletteOf = cover;
+        sg_paletteReading = reading;
         sg_paletteColors = colors;
     }
     return colors;

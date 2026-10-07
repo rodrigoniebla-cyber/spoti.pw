@@ -1,7 +1,7 @@
 // The colours of the playing cover, for the visualizer's Cover gradient colour (Visualizer.h): five colours
-// read off the blurred picture by SGPalette.m, its centre and its four quarters, and the gradient stops they
-// make round the ring (the ring in the player draws them as a conic gradient, the lock screen's frame samples
-// the same).
+// read by SGPalette.m the way SGKeyVisualizerCoverColours says (the blurred cover at its centre and four
+// quarters, or its main colours), and the gradient stops they make round the ring (the ring in the player
+// draws them as a conic gradient, the lock screen's frame samples the same).
 #import <UIKit/UIKit.h>
 
 // The colours of `image`, SGCoverPaletteColors of them; nil when it has no bitmap to read. Any thread.
@@ -16,6 +16,9 @@ NSArray<UIColor *> *SGCoverPaletteForPlayingTrack(void);
 // in place of the now playing artwork: the same picture as the one seen, at its full size, as soon as it
 // shows. The same image again does nothing. Main thread.
 void SGCoverPaletteOfferImage(UIImage *image);
+// The way the colours are read changed: the playing track's are read again, the next time they are asked
+// for or a cover is offered. Main thread.
+void SGCoverPaletteReset(void);
 // Posted on the main queue when a track's colours have been read.
 extern NSNotificationName const SGCoverPaletteDidChangeNotification;
 

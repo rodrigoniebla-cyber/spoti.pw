@@ -223,11 +223,16 @@ static NSInteger rgbOf(UIColor *color) {
     return (NSInteger)lround(r * 255) << 16 | (NSInteger)lround(g * 255) << 8 | (NSInteger)lround(b * 255);
 }
 
+// The way the bars' colours were read for sg_coverTrack (SGKeyVisualizerCoverColours): another is read again.
+static NSInteger sg_coverColours;
+
 static void refreshCover(NSString *trackID) {
-    if (!trackID || sg_coverReading || [trackID isEqualToString:sg_coverTrack]) return;
+    NSInteger colours = SGInt(SGKeyVisualizerCoverColours, SGVisualizerCoverColoursSpots);
+    if (!trackID || sg_coverReading || ([trackID isEqualToString:sg_coverTrack] && colours == sg_coverColours)) return;
     id artwork = MPNowPlayingInfoCenter.defaultCenter.nowPlayingInfo[MPMediaItemPropertyArtwork];
     if (![artwork isKindOfClass:MPMediaItemArtwork.class]) return;
     sg_coverTrack = [trackID copy];
+    sg_coverColours = colours;
     sg_coverReading = YES;
     static dispatch_queue_t queue;
     static dispatch_once_t once;

@@ -194,10 +194,11 @@ Shared:
                   full height, with falling peak caps and a slow or fast turn of the whole ring if asked, in the accent,
                   white, every hue or the Cover gradient (SGCoverPalette.m: five colours of the cover, read off the cover
                   the ring on screen shows (never the hidden rings round the songs either side), or the now playing
-                  artwork where nothing shows one, off the main thread; SGPalette.m, plain C, blurs the picture and
-                  reads it at its centre and the middle of each quarter, so only colours that cover a good part of it
-                  come back, lightened to show on black and made a little more vivid, tested in
-                  harness/visualizer/palette_test.c), a gradient colour laid along
+                  artwork where nothing shows one, off the main thread; SGPalette.m, plain C, reads them one of two ways
+                  the Cover colours row picks: Spots blurs the picture and reads it at its centre and the middle of
+                  each quarter, so only colours that cover a good part of it come back, and Main colours is k-means
+                  in OKLab weighted by how vivid each pixel is, black left out; either way lightened to show on black,
+                  tested in harness/visualizer/palette_test.c), a gradient colour laid along
                   every bar from its darkest colour inside to its lightest at the tip (a radial gradient the bars mask),
                   once round the ring, there and back four times, or bar by bar (a shape layer a colour), fading to the
                   next track's on a display link run the lyrics'
