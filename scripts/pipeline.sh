@@ -66,6 +66,25 @@ MOD_VERSION="$(cat "$ROOT/version.txt" 2>/dev/null || true)"
 OUT="${OUT:-$ROOT/out/spoti.pw-$MOD_VERSION.ipa}"
 echo "==> spoti.pw $MOD_VERSION on Spotify $SPOTIFY_VERSION -> $OUT"
 
+# What CarPlay looks for, as it stands in an IPA: the app's CarPlay entitlements, which a signing tool
+# keeps only where the profile allows them, and the CarPlay scene its Info.plist declares. Printed so a
+# build log says why Spotify does or does not show up as a CarPlay app once signed.
+carplay_report() {
+  local ipa="$1" dir exec ents
+  dir="$(mktemp -d)"
+  unzip -p "$ipa" "${APP_DIR}Info.plist" > "$dir/Info.plist" 2>/dev/null || true
+  exec="$(plutil -extract CFBundleExecutable raw -o - "$dir/Info.plist" 2>/dev/null || true)"
+  if [ -n "$exec" ] && unzip -p "$ipa" "${APP_DIR}${exec}" > "$dir/bin" 2>/dev/null; then
+    ents="$(ldid -e "$dir/bin" 2>/dev/null | grep -iE -A1 'carplay|playable-content' | grep -vE '^--$' || true)"
+    echo "    entitlements: ${ents:-none for CarPlay}" | tr '\n\t' '  '
+    echo
+  fi
+  echo "    scenes: $(plutil -p "$dir/Info.plist" 2>/dev/null | grep -oE '"(UISceneConfigurationName|UISceneDelegateClassName|UISceneClassName)" => "[^"]+"|"[A-Za-z]+SceneSessionRole[A-Za-z]+"' | tr '\n' ' ')"
+  rm -rf "$dir"
+}
+echo "==> CarPlay in Spotify's IPA"
+carplay_report "$IN"
+
 # The flag table is generated rather than committed, so it always matches the IPA being built.
 if [ ! -f "$ROOT/tweak/Sources/Shared/Flags/SGFlagList.m" ]; then
   echo "==> extracting the flag table (once, about 40 s)"
@@ -152,6 +171,9 @@ done
 echo "==> adding the alternate app icons"
 # A failure leaves the IPA as it was, without them; Mod > App icon then does not show.
 "$ROOT/scripts/app-icons.sh" "$OUT" || echo "    the app icons failed: building without them"
+
+echo "==> CarPlay in the built IPA"
+carplay_report "$OUT"
 
 if [ -n "${EXT_DIR:-}" ]; then
   echo "==> adding the Live Activity intents to Spotify's App Intents metadata"
