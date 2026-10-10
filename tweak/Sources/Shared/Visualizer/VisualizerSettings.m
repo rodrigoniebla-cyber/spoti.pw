@@ -153,6 +153,12 @@ UIViewController *SGVisualizerSettingsPage(NSArray<SGModSection *> *leading, NSS
         @"The lock screen's artwork becomes the cover in the ring, drawn again several times a second while the song plays, in the "
          "style and colour above. With lock screen lyrics showing the line as the artwork, the line sits under the ring. An animated "
          "cover (Canvas) shows over it. Applies after you restart Spotify.")];
+    SGModRow *carPlay = SGOptionRow(@"CarPlay visualizer", @"The ring on CarPlay's Now Playing", SGKeyVisualizerCarPlay);
+    [sections addObject:SGNotedSection(@"CarPlay", @[carPlay],
+        @"While CarPlay is connected, the artwork on CarPlay's Now Playing becomes the cover in the ring, at the lock screen's "
+         "frames a second, even with Spotify open on your iPhone. CarPlay only lets an app show the screens Apple draws, so the "
+         "ring goes there as the artwork, and the car may update it less often than the lock screen does. Applies after you "
+         "restart Spotify.")];
     return [[SGModPage alloc] initWithTitle:@"Visualizer" intro:intro sections:sections footer:nil];
 }
 

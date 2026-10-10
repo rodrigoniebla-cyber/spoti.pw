@@ -25,7 +25,10 @@ static const NSTimeInterval kCommandWait = 5;
 static NSString *trackOf(SPTPlayerState *state) { return SGURIString(state.track.URI); }
 static BOOL isSong(NSString *uri) { return [uri hasPrefix:@"spotify:track:"]; }
 static BOOL notPlaying(SPTPlayerState *state) { return state.isPaused || !state.isPlaying; }
-static BOOL overheated(void) { return NSProcessInfo.processInfo.thermalState >= NSProcessInfoThermalStateSerious; }
+// Hot enough for Sing to stop, unless it is told to keep going whatever the heat (SGKeySingIgnoreHeat).
+static BOOL overheated(void) {
+    return NSProcessInfo.processInfo.thermalState >= NSProcessInfoThermalStateSerious && !SGFlag(SGKeySingIgnoreHeat, NO);
+}
 // Everything between the source and the ear, in source seconds: the output route, and speed and pitch's unit.
 static double downstreamLatency(void) {
     return (AVAudioSession.sharedInstance.outputLatency + SGPlayerAudioLatency()) * SGPlayerSpeed();
@@ -451,6 +454,11 @@ void SGSingConfigure(BOOL enabled) {
 SGSingState SGSingCurrentState(void) { return sg_configured ? sg_controller.state : SGSingUnavailable; }
 BOOL SGSingAvailable(void) { return SGSingCurrentState() != SGSingUnavailable; }
 NSString *SGSingExplanation(void) { return [sg_controller restriction] ?: sg_controller.explanation; }
+// The switch changed: as if the heat had, so Sing stopped for it comes back, or stops now if it is hot.
+void SGSingHeatSettingChanged(void) {
+    if (sg_controller) [sg_controller thermal:nil];
+}
+
 BOOL SGSingCanRetry(void) {
     return sg_configured && sg_controller.state != SGSingUnavailable && !sg_controller.session &&
         !sg_controller.retired.count && ![sg_controller restriction] && !SGPlayerState().isLoading;

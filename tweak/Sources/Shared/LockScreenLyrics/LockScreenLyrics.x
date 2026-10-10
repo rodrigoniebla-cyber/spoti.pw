@@ -11,6 +11,7 @@
 // when the line shows as the artwork) and sends the info again with that frame as the artwork.
 #import <MediaPlayer/MediaPlayer.h>
 #import <CoreImage/CoreImage.h>
+#import <AVFoundation/AVFoundation.h>
 #import "Core/SGCore.h"
 #import "LockScreenLyrics.h"
 #import "Shared/Lyrics/Lyrics.h"
@@ -35,8 +36,9 @@ static NSString *sg_shownLine;
 static SGLockScreenLyricsPlace sg_place;
 static BOOL sg_resending;
 static NSTimer *sg_timer;
-// Which of the two is on, read at launch; the frame timer, the frame on show and whether one is being drawn.
-static BOOL sg_lyricsOn, sg_visualizerOn, sg_playing, sg_rendering;
+// Which of the two is on, read at launch, and the visualizer for CarPlay; the frame timer, the frame on show
+// and whether one is being drawn.
+static BOOL sg_lyricsOn, sg_visualizerOn, sg_carPlayOn, sg_playing, sg_rendering;
 static NSTimer *sg_frameTimer;
 static MPMediaItemArtwork *sg_frameArtwork;
 static CFTimeInterval sg_frameAt;
@@ -331,9 +333,24 @@ static void frameTick(void) {
     });
 }
 
-// Frames are drawn while the visualizer is on, the sound moves and Spotify is not what is on screen.
+// CarPlay is connected: the sound goes to the car, or Spotify has a CarPlay scene up (CarPlay's role for a
+// scene, by name, as the CarPlay framework is not linked).
+static BOOL carPlayConnected(void) {
+    for (AVAudioSessionPortDescription *port in AVAudioSession.sharedInstance.currentRoute.outputs) {
+        if ([port.portType isEqualToString:AVAudioSessionPortCarAudio]) return YES;
+    }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if ([scene.session.role isEqualToString:@"CPTemplateApplicationSceneSessionRoleApplication"]) return YES;
+    }
+    return NO;
+}
+
+// Frames are drawn while the sound moves and either Spotify is not what is on screen (the lock screen
+// visualizer) or CarPlay is connected (the CarPlay visualizer).
 static void updateFrames(void) {
-    BOOL run = sg_visualizerOn && sg_playing && UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
+    BOOL away = sg_visualizerOn && UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
+    BOOL car = sg_carPlayOn && carPlayConnected();
+    BOOL run = sg_playing && (away || car);
     if (run == (sg_frameTimer != nil)) return;
     SGVisualizerSetLockScreenListening(run);
     if (run) {
@@ -418,22 +435,31 @@ static BOOL playingBy(NSDictionary *info) {
 %ctor {
     sg_lyricsOn = !SGOff("lockscreen") && SGFlag(SGKeyLockScreenLyrics, NO);
     sg_visualizerOn = !SGOff("visualizer") && SGFlag(SGKeyLockScreenVisualizer, NO);
-    if (!sg_lyricsOn && !sg_visualizerOn) return;
+    sg_carPlayOn = !SGOff("visualizer") && SGFlag(SGKeyVisualizerCarPlay, NO);
+    if (!sg_lyricsOn && !sg_visualizerOn && !sg_carPlayOn) return;
     sg_lock = [NSObject new];
     sg_artworkLock = [NSObject new];
     // Without lock screen lyrics the line has nowhere to go but the visualizer's frame, and only if asked.
     sg_place = sg_lyricsOn ? (SGLockScreenLyricsPlace)MAX(0, MIN(2, SGInt(SGKeyLockScreenLyricsPlace, SGLockScreenLyricsArtist)))
                            : SGLockScreenLyricsArtist;
     %init;
-    if (sg_visualizerOn) {
+    if (sg_visualizerOn || sg_carPlayOn) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            // The app going to and from the screen, and CarPlay coming and going: its audio route, and its scene.
             for (NSNotificationName name in @[UIApplicationDidBecomeActiveNotification, UIApplicationWillResignActiveNotification,
-                                              UIApplicationDidEnterBackgroundNotification, UIApplicationWillEnterForegroundNotification]) {
+                                              UIApplicationDidEnterBackgroundNotification, UIApplicationWillEnterForegroundNotification,
+                                              AVAudioSessionRouteChangeNotification, UISceneWillConnectNotification,
+                                              UISceneDidDisconnectNotification]) {
+                // A scene going is still among the connected ones as it says so: looked at again a moment later.
                 [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
-                                                            usingBlock:^(NSNotification *note) { updateFrames(); }];
+                                                            usingBlock:^(NSNotification *note) {
+                    updateFrames();
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ updateFrames(); });
+                }];
             }
         });
     }
     // The timers wait for Spotify to report a playing track; nothing before that has a line or a sound to show.
-    SGLog(@"lock screen: lyrics %@, visualizer %@", sg_lyricsOn ? @"on" : @"off", sg_visualizerOn ? @"on" : @"off");
+    SGLog(@"lock screen: lyrics %@, visualizer %@, CarPlay visualizer %@", sg_lyricsOn ? @"on" : @"off",
+          sg_visualizerOn ? @"on" : @"off", sg_carPlayOn ? @"on" : @"off");
 }

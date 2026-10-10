@@ -14,6 +14,10 @@ static inline BOOL SGSingStateIsOn(SGSingState state) {
     return state == SGSingActive || state == SGSingReady || state == SGSingRecovering;
 }
 BOOL SGSingSupported(void); // iOS 18, the first its Core ML model (exported for iOS 18) loads on
+// Sing keeps going when the iPhone runs hot, rather than stopping until it has cooled down. Off until switched
+// on; applies straight away (SGSingHeatSettingChanged).
+#define SGKeySingIgnoreHeat @"spotifyglass.sing.ignoreHeat"
+void SGSingHeatSettingChanged(void);
 // Sing's switch (the redesign's Mod Settings > Karaoke), at launch and whenever it is turned. Off, Sing does no
 // work and is unavailable; on, it is available once its voice model is on this iPhone (SGSingModel.h).
 void SGSingConfigure(BOOL enabled);

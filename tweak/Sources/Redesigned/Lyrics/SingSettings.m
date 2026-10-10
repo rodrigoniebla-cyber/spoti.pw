@@ -21,7 +21,8 @@ static NSString *footer(void) {
     return [NSString stringWithFormat:@"Sing turns the vocals of the song playing down to sing over, from the microphone in its lyrics. "
             "It needs iOS 18 or later and works as it is, on a separator built into the app that turns down what sits in the "
             "middle of the mix. The voice model, %@, is a cleaner one, downloaded once, and, like the built-in one, runs only "
-            "on this iPhone. The switch and the download apply straight away.", aboutSize()];
+            "on this iPhone. Sing stops when your iPhone gets hot, unless Ignore temperature is on: then it keeps going, and "
+            "your iPhone may get hotter and slow itself down. The switches and the download apply straight away.", aboutSize()];
 }
 
 static void tell(NSString *title, NSString *message) {
@@ -134,7 +135,10 @@ static SGModSection *karaokeSection(void) {
         SGSingModelState state = SGSingModelCurrentState();
         return state == SGSingModelInstalled || (state == SGSingModelMissing && SGSingModelReceived() > 0);
     };
-    return SGNotedSection(@"Karaoke", @[sing, model, download, cancel, remove], footer());
+    SGModRow *heat = SGWaitsOn(SGOptionRow(@"Ignore temperature", @"Keeps singing when your iPhone runs hot", SGKeySingIgnoreHeat),
+                               SGRKeySing, NO);
+    heat.changed = ^(BOOL on) { SGSingHeatSettingChanged(); };
+    return SGNotedSection(@"Karaoke", @[sing, heat, model, download, cancel, remove], footer());
 }
 
 // Spatial voice: the voice kept in front with head tracking AirPods, applying at once.

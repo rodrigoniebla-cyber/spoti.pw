@@ -128,7 +128,10 @@ Shared:
                   it blurred, the line under it when lock screen lyrics show the line as the artwork) and sends the
                   info again with that frame as the artwork; the cover is fetched from Spotify's artwork on that
                   queue, never the main thread. An animated artwork (LockScreenArtwork/) is drawn over it, so the
-                  Canvas is best off with it
+                  Canvas is best off with it. The CarPlay visualizer (Visualizer > CarPlay, read at launch) runs the
+                  same frames while CarPlay is connected (the route's CarAudio port, or a CarPlay scene up), Spotify
+                  on screen or not: CarPlay's Now Playing shows the now playing artwork, the only picture an audio
+                  app can put on the car's screen
     LockScreenArtwork/ the track's Canvas or its album's Apple Music cover as the lock screen's animated
                   artwork, from iOS 26 (Apple takes an MPMediaItemAnimatedArtwork under one of
                   MPNowPlayingInfoCenter's animated artwork keys, and the mod puts one there through a second
@@ -329,7 +332,7 @@ Redesigned:
                   sheet, and a sheet with no rows within 4 s is shown as it is. It opens on the rows the last
                   menu had, kept across launches, and moves to Spotify's as they come in, a tap meanwhile held
                   until they do. Tested in the simulator against harness/playermenu/
-                  With Sing on, on the built-in separator or the downloaded voice model (Mod Settings > Karaoke, Redesigned/Lyrics/SingSettings.m,
+                  With Sing on (it stops when the iPhone runs hot, unless Karaoke > Ignore temperature, SGKeySingIgnoreHeat, is on), on the built-in separator or the downloaded voice model (Mod Settings > Karaoke, Redesigned/Lyrics/SingSettings.m,
                   both applying at once), its microphone (Redesigned/Lyrics/SGRSingControl.m) sits in the
                   lyrics' bottom trailing corner, opposite their glass button, and goes down with the lines when the
                   controls go; while it is open, preparing or explaining itself the controls stay, and a touch on it

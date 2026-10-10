@@ -99,6 +99,10 @@ void SGVisualizerSetLiveActivityListening(BOOL listening);
 #define SGKeyLockScreenVisualizer @"spotifyglass.lockScreenVisualizer"            // off until switched on
 #define SGKeyLockScreenVisualizerRate @"spotifyglass.lockScreenVisualizer.rate"   // an index into the rates below
 NSInteger SGLockScreenVisualizerFramesPerSecond(void);   // 6, 10 (unset) or 15
+// The same frames while CarPlay is connected, whether Spotify is on the iPhone's screen or not: CarPlay's Now
+// Playing shows the now playing artwork, so the ring is drawn there. Off until switched on; read at launch.
+// While it runs, the iPhone's lock screen and Control Center show the frames too, the artwork being one.
+#define SGKeyVisualizerCarPlay @"spotifyglass.visualizer.carPlay"
 
 // SGVisualizerFrame.m: one picture of the ring, `side` points square at scale 1, in the ring's own style,
 // colour and mirror. Any thread; `cover` and `backdrop` may be nil, and `line`/`next` are drawn under it.
